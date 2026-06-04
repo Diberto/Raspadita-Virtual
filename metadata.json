@@ -1,0 +1,6 @@
+{
+  "name": "Raspadita Virtual Carnicería",
+  "description": "Raspadita virtual interactiva para fidelización de clientes de carnicería con panel de administración, cupones únicos y estadísticas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
