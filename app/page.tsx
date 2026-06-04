@@ -32,7 +32,10 @@ import {
   Download,
   Camera,
   Calendar,
-  Filter
+  Filter,
+  Lock,
+  User,
+  Mail
 } from 'lucide-react';
 import ScratchCard from '../components/ScratchCard';
 import QRGenerator from '../components/QRGenerator';
@@ -74,6 +77,12 @@ interface Coupon {
   userPhone?: string;
   expiryDate?: string;
   dateCreated?: string;
+}
+
+interface DailyTrend {
+  date: string;
+  wins: number;
+  unclaimed: number;
 }
 
 export default function Home() {
@@ -121,6 +130,14 @@ export default function Home() {
   const [selectedView, setSelectedView] = useState<'split' | 'client' | 'admin'>('split');
   // Admin Subsection View Control
   const [activeTabAdmin, setActiveTabAdmin] = useState<'dashboard' | 'branding' | 'prizes' | 'validator'>('dashboard');
+
+  // Admin Authentication States
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  const [adminUsernameInput, setAdminUsernameInput] = useState<string>('');
+  const [adminPasswordInput, setAdminPasswordInput] = useState<string>('');
+  const [googleEmailInput, setGoogleEmailInput] = useState<string>('');
+  const [showGoogleLoginModal, setShowGoogleLoginModal] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string>('');
 
   // Google Sheets Integration configurations
   const [googleToken, setGoogleToken] = useState<string | null>(null);
@@ -188,6 +205,22 @@ export default function Home() {
   const [triggerRestart, setTriggerRestart] = useState(0);
   const [isStrictClientUrl, setIsStrictClientUrl] = useState(false);
   const lastFrameTimeRef = React.useRef<number>(0);
+
+  // Onboarding modal configuration
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Email alert and SMTP simulation
+  const [sendEmailConfirmation, setSendEmailConfirmation] = useState(true);
+  const [adminEmailNotifyToggled, setAdminEmailNotifyToggled] = useState(true);
+  const [emailNotificationToast, setEmailNotificationToast] = useState<{ to: string; subject: string; body: string; code: string } | null>(null);
+
+  // Auto Dark Mode configuration
+  const [autoDarkMode, setAutoDarkMode] = useState(true);
+  const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>('dark');
+
+  // Winning Trends dataset or graphs
+  const [winningHistory, setWinningHistory] = useState<DailyTrend[]>([]);
+  const [activeHoverIndex, setActiveHoverIndex] = useState<number | null>(null);
 
   // Helper code to verify if coupon expiry date is in the past
   const isCouponExpired = (coupon: Coupon): boolean => {
@@ -264,6 +297,81 @@ export default function Home() {
         }
         const savedDefaultExpiry = localStorage.getItem('raspa_couponDefaultExpiry');
         if (savedDefaultExpiry) setCouponDefaultExpiry(savedDefaultExpiry);
+
+        // Hydrate Admin Authentication
+        try {
+          const savedAuth = localStorage.getItem('raspa_adminAuth');
+          if (savedAuth === 'true') {
+            setIsAdminAuthenticated(true);
+          }
+        } catch (_) {}
+
+        // Check if user has already onboarded
+        try {
+          const savedOnboarded = localStorage.getItem('raspa_onboarded');
+          if (savedOnboarded !== 'true') {
+            setShowOnboarding(true);
+          }
+        } catch (_) {}
+
+        // Hydrate email preferences
+        try {
+          const savedSendEmail = localStorage.getItem('raspa_sendEmailConf');
+          if (savedSendEmail !== null) {
+            setSendEmailConfirmation(savedSendEmail === 'true');
+          }
+          const savedAdminEmailToggle = localStorage.getItem('raspa_adminEmailToggle');
+          if (savedAdminEmailToggle !== null) {
+            setAdminEmailNotifyToggled(savedAdminEmailToggle === 'true');
+          }
+        } catch (_) {}
+
+        // Hydrate Auto Dark Mode
+        try {
+          const savedAutoDarkSetting = localStorage.getItem('raspa_autoDark');
+          if (savedAutoDarkSetting !== null) {
+            setAutoDarkMode(savedAutoDarkSetting === 'true');
+          }
+        } catch (_) {}
+
+        // Track OS color scheme setting dynamically
+        try {
+          const queryMedia = window.matchMedia('(prefers-color-scheme: dark)');
+          setSystemTheme(queryMedia.matches ? 'dark' : 'light');
+          
+          const listenerTheme = (e: MediaQueryListEvent) => {
+            setSystemTheme(e.matches ? 'dark' : 'light');
+          };
+          queryMedia.addEventListener('change', listenerTheme);
+        } catch (_) {}
+
+        // Hydrate or fallback winning statistics trend
+        try {
+          const savedTrend = localStorage.getItem('raspa_winningTrend');
+          if (savedTrend) {
+            setWinningHistory(JSON.parse(savedTrend));
+          } else {
+            setWinningHistory([
+              { date: '29 May', wins: 8, unclaimed: 5 },
+              { date: '30 May', wins: 12, unclaimed: 8 },
+              { date: '31 May', wins: 5, unclaimed: 3 },
+              { date: '01 Jun', wins: 15, unclaimed: 10 },
+              { date: '02 Jun', wins: 20, unclaimed: 12 },
+              { date: '03 Jun', wins: 14, unclaimed: 9 },
+              { date: '04 Jun', wins: 22, unclaimed: 15 }
+            ]);
+          }
+        } catch (_) {
+          setWinningHistory([
+            { date: '29 May', wins: 8, unclaimed: 5 },
+            { date: '30 May', wins: 12, unclaimed: 8 },
+            { date: '31 May', wins: 5, unclaimed: 3 },
+            { date: '01 Jun', wins: 15, unclaimed: 10 },
+            { date: '02 Jun', wins: 20, unclaimed: 12 },
+            { date: '03 Jun', timestamp: '03 Jun', wins: 14, unclaimed: 9 } as any,
+            { date: '04 Jun', wins: 22, unclaimed: 15 }
+          ]);
+        }
       }
     }, 0);
     return () => clearTimeout(timer);
@@ -274,6 +382,38 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       localStorage.setItem(key, val);
     }
+  };
+
+  // --- Admin Access Control Handler Methods ---
+  const handleAdminCredentialsLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    if (adminUsernameInput.trim() === 'republica' && adminPasswordInput === 'republica123') {
+      setIsAdminAuthenticated(true);
+      persistState('raspa_adminAuth', 'true');
+      setAdminUsernameInput('');
+      setAdminPasswordInput('');
+    } else {
+      setAuthError('Usuario o contraseña de administrador incorrectos.');
+    }
+  };
+
+  const handleGoogleEmailLogin = (email: string) => {
+    setAuthError('');
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail === 'republicatecnica7@gmail.com' || cleanEmail === 'dmovil@gmail.com') {
+      setIsAdminAuthenticated(true);
+      persistState('raspa_adminAuth', 'true');
+      setShowGoogleLoginModal(false);
+      setGoogleEmailInput('');
+    } else {
+      setAuthError('El correo "' + email + '" no es un administrador autorizado.');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    persistState('raspa_adminAuth', 'false');
   };
 
   // Camera QR Code Scanner Effect
@@ -549,6 +689,44 @@ export default function Home() {
       setRecentActivity(updatedActivities);
       persistState('raspa_activity', JSON.stringify(updatedActivities));
 
+      // Increment winning history daily trend metrics
+      try {
+        const todayFormatted = (() => {
+          const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' };
+          return new Date().toLocaleDateString('es-ES', options).replace('.', '');
+        })();
+
+        const updatedTrends = winningHistory.map(item => {
+          if (item.date.toLowerCase() === todayFormatted.toLowerCase()) {
+            return { ...item, wins: item.wins + 1, unclaimed: item.unclaimed + 1 };
+          }
+          return item;
+        });
+
+        const hasToday = winningHistory.some(item => item.date.toLowerCase() === todayFormatted.toLowerCase());
+        const finalTrends = hasToday ? updatedTrends : [...winningHistory, { date: todayFormatted, wins: 1, unclaimed: 1 }].slice(-7);
+
+        setWinningHistory(finalTrends);
+        persistState('raspa_winningTrend', JSON.stringify(finalTrends));
+      } catch (err) {
+        console.error('Error updating daily winning trend:', err);
+      }
+
+      // Send email simulation toast outbox
+      if (adminEmailNotifyToggled && sendEmailConfirmation && clientRegEmail.trim()) {
+        const toEmail = clientRegEmail.trim();
+        const prizeWonName = customerActivePrize.name;
+        const prizeCode = customerCouponCode;
+        setTimeout(() => {
+          setEmailNotificationToast({
+            to: toEmail,
+            subject: `🏆 ¡Ganaste un premio en ${shopName}! Código: ${prizeCode}`,
+            body: `Hola ${participantName},\n\nFelicitaciones! Ganaste "${prizeWonName}" en la campaña de fidelización "${campaignName}". Presentá tu código de cupón único: ${prizeCode} en caja para reclamarlo. ¡Gracias por participar!`,
+            code: prizeCode
+          });
+        }, 1200);
+      }
+
     } else {
       // Append non-winning activity log
       const newActivity: ActivityLog = {
@@ -627,6 +805,10 @@ export default function Home() {
     e.preventDefault();
     if (!clientRegName.trim() || !clientRegPhone.trim()) {
       alert('Por favor, ingresá Nombre y Celular.');
+      return;
+    }
+    if (sendEmailConfirmation && !clientRegEmail.trim()) {
+      alert('Por favor, ingresá una dirección de correo para recibir la confirmación de tu premio.');
       return;
     }
     setClientRegistered(true);
@@ -883,6 +1065,415 @@ export default function Home() {
       default:
         return <Tag size={size} />;
     }
+  };
+
+  const renderAdminLoginForm = () => {
+    return (
+      <div 
+        className="card-panel" 
+        style={{ 
+          maxWidth: '440px', 
+          width: '100%', 
+          backgroundColor: '#111113', 
+          border: '2px solid var(--theme-primary)', 
+          borderRadius: '12px', 
+          padding: '2.5rem 2rem', 
+          margin: '2rem auto',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 10px 10px -5px rgba(0, 0, 0, 0.7)',
+          color: '#fff',
+          fontFamily: '"Inter", sans-serif'
+        }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ 
+            width: '56px', 
+            height: '56px', 
+            borderRadius: '50%', 
+            backgroundColor: 'var(--theme-primary-light)', 
+            color: 'var(--theme-primary)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            margin: '0 auto 1rem auto',
+            border: '1px solid var(--theme-primary)'
+          }}>
+            <Shield size={24} />
+          </div>
+          <h2 style={{ 
+            fontFamily: '"Space Grotesk", sans-serif', 
+            fontSize: '1.5rem', 
+            fontWeight: 900, 
+            textTransform: 'uppercase', 
+            letterSpacing: '-0.5px',
+            color: '#fff',
+            margin: '0 0 0.25rem 0'
+          }}>
+            Acceso Autorizado
+          </h2>
+          <p style={{ color: '#88888b', fontSize: '0.75rem', margin: 0 }}>
+            Iniciá sesión para administrar premios, marcas y validar cupones.
+          </p>
+        </div>
+
+        {authError && (
+          <div style={{ 
+            backgroundColor: 'rgba(239, 68, 68, 0.15)', 
+            border: '1px solid #ef4444', 
+            borderRadius: '6px', 
+            padding: '0.75rem', 
+            color: '#fca5a5', 
+            fontSize: '0.75rem', 
+            marginBottom: '1rem',
+            textAlign: 'center',
+            lineHeight: '1.4'
+          }}>
+            ⚠️ {authError}
+          </div>
+        )}
+
+        {/* 1. Google OAuth Session login section */}
+        <button
+          type="button"
+          onClick={() => setShowGoogleLoginModal(true)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px',
+            backgroundColor: '#ffffff',
+            color: '#1f2937',
+            fontFamily: '"Inter", sans-serif',
+            fontWeight: '600',
+            fontSize: '0.85rem',
+            padding: '0.75rem',
+            borderRadius: '6px',
+            border: 'none',
+            cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            transition: 'background-color 0.15s ease',
+            marginBottom: '1.25rem'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f3f4f6'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#ffffff'; }}
+        >
+          {/* Custom inline vector SVG for Google colorful G branding */}
+          <svg width="18" height="18" viewBox="0 0 18 18">
+            <path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.71v2.24h2.9c1.7-1.57 2.7-3.88 2.7-6.6z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.2l-2.9-2.24c-.8.54-1.84.87-3.06.87-2.35 0-4.34-1.58-5.05-3.72H.91v2.3A9 9 0 0 0 9 18z"/>
+            <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.6 9c0-.6.1-1.18.27-1.7v-2.3H.91A9 9 0 0 0 0 9c0 1.62.43 3.15 1.18 4.5l2.77-2.3z"/>
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35L15 2.1A9 9 0 0 0 .91 4.98l2.77 2.3c.7-2.14 2.7-3.72 5.32-3.72z"/>
+          </svg>
+          Iniciar sesión con Google
+        </button>
+
+        {/* Separator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem' }}>
+          <div style={{ flex: 1, height: '1px', backgroundColor: '#27272a' }} />
+          <span style={{ fontSize: '0.65rem', color: '#71717a', textTransform: 'uppercase', letterSpacing: '1px' }}>o con usuario</span>
+          <div style={{ flex: 1, height: '1px', backgroundColor: '#27272a' }} />
+        </div>
+
+        {/* 2. User & Password form */}
+        <form onSubmit={handleAdminCredentialsLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div>
+            <label style={{ 
+              fontSize: '0.7rem', 
+              color: '#a1a1aa', 
+              textTransform: 'uppercase', 
+              fontWeight: 'bold', 
+              display: 'block', 
+              marginBottom: '4px' 
+            }}>
+              Usuario Administrador
+            </label>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#71717a' }}>
+                <User size={14} />
+              </span>
+              <input
+                type="text"
+                required
+                value={adminUsernameInput}
+                onChange={(e) => setAdminUsernameInput(e.target.value)}
+                placeholder="Ej: republica"
+                style={{
+                  width: '100%',
+                  backgroundColor: '#09090b',
+                  border: '1px solid #27272a',
+                  borderRadius: '6px',
+                  padding: '0.65rem 0.65rem 0.65rem 2rem',
+                  color: '#fff',
+                  fontSize: '0.8rem',
+                  outline: 'none',
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--theme-primary)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#27272a'; }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ 
+              fontSize: '0.7rem', 
+              color: '#a1a1aa', 
+              textTransform: 'uppercase', 
+              fontWeight: 'bold', 
+              display: 'block', 
+              marginBottom: '4px' 
+            }}>
+              Clave Acceso
+            </label>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#71717a' }}>
+                <Lock size={14} />
+              </span>
+              <input
+                type="password"
+                required
+                value={adminPasswordInput}
+                onChange={(e) => setAdminPasswordInput(e.target.value)}
+                placeholder="••••••••"
+                style={{
+                  width: '100%',
+                  backgroundColor: '#09090b',
+                  border: '1px solid #27272a',
+                  borderRadius: '6px',
+                  padding: '0.65rem 0.65rem 0.65rem 2rem',
+                  color: '#fff',
+                  fontSize: '0.8rem',
+                  outline: 'none',
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--theme-primary)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#27272a'; }}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            style={{
+              marginTop: '0.5rem',
+              backgroundColor: 'var(--theme-primary)',
+              color: '#000',
+              fontWeight: 'bold',
+              fontFamily: '"Space Grotesk", sans-serif',
+              fontSize: '0.8rem',
+              padding: '0.75rem',
+              borderRadius: '6px',
+              border: 'none',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              transition: 'transform 0.1s ease',
+              width: '100%'
+            }}
+          >
+            Iniciar Sesión Administrativa
+          </button>
+        </form>
+
+        {/* Informative credentials hints block to make testing and usage perfect */}
+        <div style={{ marginTop: '1.5rem', padding: '0.75rem', backgroundColor: '#17171a', border: '1px dashed #27272a', borderRadius: '6px', fontSize: '0.65rem', color: '#a1a1aa', lineHeight: '1.4' }}>
+          🔒 <b>Modo de Prueba Autorizado:</b><br />
+          • Usuario: <code style={{ color: 'var(--theme-accent)' }}>republica</code> / Clave: <code style={{ color: 'var(--theme-accent)' }}>republica123</code><br />
+          • Google Permitidos: <code style={{ color: '#fff' }}>republicatecnica7@gmail.com</code> &amp; <code style={{ color: '#fff' }}>dmovil@gmail.com</code>
+        </div>
+      </div>
+    );
+  };
+
+  const renderWinningTrendsChart = () => {
+    if (winningHistory.length === 0) return null;
+
+    // Dimensions setup for clean SVG projection
+    const width = 500;
+    const height = 180;
+    const paddingLeft = 32;
+    const paddingRight = 16;
+    const paddingTop = 20;
+    const paddingBottom = 30;
+
+    const chartWidth = width - paddingLeft - paddingRight;
+    const chartHeight = height - paddingTop - paddingBottom;
+
+    // Determine values limits
+    const maxWins = Math.max(...winningHistory.map(d => d.wins), 10);
+    const minWins = 0;
+
+    const points = winningHistory.map((item, index) => {
+      const x = paddingLeft + (index / (winningHistory.length - 1)) * chartWidth;
+      const y = paddingTop + chartHeight - ((item.wins - minWins) / (maxWins - minWins)) * chartHeight;
+      return { x, y, ...item, index };
+    });
+
+    // Stroke layout outline string
+    const dLine = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+    // Highlight area shader boundings
+    const dArea = `${dLine} L ${points[points.length - 1].x} ${paddingTop + chartHeight} L ${points[0].x} ${paddingTop + chartHeight} Z`;
+
+    return (
+      <div 
+        className="card-panel" 
+        style={{ 
+          background: '#121214', 
+          border: '1px solid #222', 
+          borderRadius: '6px', 
+          padding: '1.25rem', 
+          marginTop: '1.5rem',
+          position: 'relative'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <div>
+            <h4 style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 'bold', margin: '0' }}>📈 Tendencias de Ganadores (Últimos 7 días)</h4>
+            <p style={{ fontSize: '0.65rem', color: '#888', margin: '2px 0 0' }}>Premios entregados por jornada en tienda física</p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', fontSize: '0.65rem' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: 8, height: 8, backgroundColor: 'var(--theme-primary)', borderRadius: '50%' }} />
+              Ganados
+            </span>
+          </div>
+        </div>
+
+        <div style={{ position: 'relative' }}>
+          <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="auto" style={{ overflow: 'visible' }}>
+            <defs>
+              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--theme-primary)" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="var(--theme-primary)" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
+
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
+              const y = paddingTop + ratio * chartHeight;
+              const val = Math.round(maxWins - ratio * (maxWins - minWins));
+              return (
+                <g key={i}>
+                  <line 
+                    x1={paddingLeft} 
+                    y1={y} 
+                    x2={width - paddingRight} 
+                    y2={y} 
+                    stroke="#1e1e24" 
+                    strokeWidth="1" 
+                    strokeDasharray="2 4" 
+                  />
+                  <text 
+                    x={paddingLeft - 6} 
+                    y={y + 3} 
+                    fill="#666" 
+                    fontSize="8" 
+                    fontFamily="monospace" 
+                    textAnchor="end"
+                  >
+                    {val}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Trend Area Gradient */}
+            <path d={dArea} fill="url(#chartGradient)" />
+
+            {/* Trend Line */}
+            <path 
+              d={dLine} 
+              fill="none" 
+              stroke="var(--theme-primary)" 
+              strokeWidth="2.5" 
+              strokeLinecap="round"
+              strokeLinejoin="round" 
+            />
+
+            {/* Hover tooltip line indicator */}
+            {activeHoverIndex !== null && points[activeHoverIndex] && (
+              <line 
+                x1={points[activeHoverIndex].x} 
+                y1={paddingTop} 
+                x2={points[activeHoverIndex].x} 
+                y2={paddingTop + chartHeight} 
+                stroke="rgba(255, 255, 255, 0.15)" 
+                strokeWidth="1" 
+              />
+            )}
+
+            {/* Points circles */}
+            {points.map((p, i) => (
+              <g 
+                key={i}
+                onMouseEnter={() => setActiveHoverIndex(i)}
+                onMouseLeave={() => setActiveHoverIndex(null)}
+                style={{ cursor: 'pointer' }}
+              >
+                <circle 
+                  cx={p.x} 
+                  cy={p.y} 
+                  r={activeHoverIndex === i ? 6 : 4} 
+                  fill={activeHoverIndex === i ? 'var(--theme-primary)' : '#18181b'} 
+                  stroke="var(--theme-primary)" 
+                  strokeWidth="2" 
+                />
+                {/* Transparent overlay for easier hover interaction */}
+                <circle 
+                  cx={p.x} 
+                  cy={p.y} 
+                  r="12" 
+                  fill="transparent" 
+                />
+              </g>
+            ))}
+
+            {/* X Axis Labels */}
+            {points.map((p, i) => (
+              <text 
+                key={i} 
+                x={p.x} 
+                y={height - 8} 
+                fill="#666" 
+                fontSize="8" 
+                fontFamily="monospace" 
+                textAnchor="middle"
+              >
+                {p.date}
+              </text>
+            ))}
+          </svg>
+
+          {/* Chart Interactivity Tooltip Card */}
+          {activeHoverIndex !== null && points[activeHoverIndex] && (
+            <div 
+              style={{
+                position: 'absolute',
+                top: '10px',
+                left: `${(points[activeHoverIndex].x / width) * 100}%`,
+                transform: 'translateX(-50%)',
+                backgroundColor: '#18181c',
+                border: '1px solid var(--theme-primary)',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                color: '#fff',
+                fontSize: '0.65rem',
+                zIndex: 10,
+                pointerEvents: 'none',
+                boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
+                whiteSpace: 'nowrap',
+                fontFamily: 'monospace'
+              }}
+            >
+              <div style={{ color: 'var(--theme-primary)', fontWeight: 'bold' }}>{points[activeHoverIndex].date}</div>
+              <div>🏆 Ganados: <strong style={{ color: '#fff' }}>{points[activeHoverIndex].wins}</strong></div>
+              <div>⏳ Pendientes: <strong style={{ color: '#FFD700' }}>{points[activeHoverIndex].unclaimed}</strong></div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderCashierTerminal = () => {
@@ -1368,7 +1959,7 @@ export default function Home() {
   if (!isMounted) return null;
 
   return (
-    <div className={`app-container ${themeSelected === 'prime' ? 'theme-prime' : ''} ${themeSelected === 'charcoal' ? 'theme-charcoal' : ''} ${themeSelected === 'wood' ? 'theme-wood' : ''} ${themeSelected === 'organic' ? 'theme-organic' : ''}`}>
+    <div className={`app-container ${autoDarkMode && systemTheme === 'light' ? 'mode-light' : ''} ${themeSelected === 'prime' ? 'theme-prime' : ''} ${themeSelected === 'charcoal' ? 'theme-charcoal' : ''} ${themeSelected === 'wood' ? 'theme-wood' : ''} ${themeSelected === 'organic' ? 'theme-organic' : ''}`}>
       
       {/* Top Navbar Header */}
       {!isStrictClientUrl && (
@@ -1422,8 +2013,21 @@ export default function Home() {
             
             {/* Left Column: Admin control dashboard */}
             <div className="flex flex-col gap-4">
-              
-              {/* Campaign High-contrast Brutalist Hero Header */}
+              {!isAdminAuthenticated ? (
+                <>
+                  <div className="card-panel" style={{ padding: '1.5rem', background: '#121212', border: '2px solid #222', textAlign: 'center' }}>
+                    <h3 style={{ textTransform: 'uppercase', fontFamily: '"Space Grotesk", sans-serif', fontSize: '1rem', fontWeight: 'bold', color: 'var(--theme-primary)', margin: 0 }}>
+                      🔒 ÁREA DE ADMINISTRACIÓN
+                    </h3>
+                    <p style={{ color: '#a1a1aa', fontSize: '0.7rem', margin: '4px 0 0 0' }}>
+                      Iniciá sesión para acceder a las estadísticas en vivo y controles de la raspadita.
+                    </p>
+                  </div>
+                  {renderAdminLoginForm()}
+                </>
+              ) : (
+                <>
+                  {/* Campaign High-contrast Brutalist Hero Header */}
               <div className="card-panel" style={{ padding: '2rem', background: '#121212', border: '2px solid #222' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
                   <div>
@@ -1487,33 +2091,45 @@ export default function Home() {
                 </div>
 
                 {/* Subsections navigation tabs */}
-                <div className="nav-tabs" style={{ marginBottom: '1.25rem', backgroundColor: '#1d1d21' }}>
+                <div className="nav-tabs" style={{ marginBottom: '1.25rem', backgroundColor: '#1d1d21', display: 'flex', flexWrap: 'wrap' }}>
                   <button
                     className={`nav-tab-button ${activeTabAdmin === 'dashboard' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
                     onClick={() => setActiveTabAdmin('dashboard')}
                   >
                     Campaña y Stats
                   </button>
                   <button
                     className={`nav-tab-button ${activeTabAdmin === 'branding' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
                     onClick={() => setActiveTabAdmin('branding')}
                   >
                     Personalizar Marca
                   </button>
                   <button
                     className={`nav-tab-button ${activeTabAdmin === 'prizes' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
                     onClick={() => setActiveTabAdmin('prizes')}
                   >
                     Premios y Odds
                   </button>
                   <button
                     className={`nav-tab-button ${activeTabAdmin === 'validator' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
                     onClick={() => {
                       setActiveTabAdmin('validator');
                       setMatchedCoupon(null);
                     }}
                   >
                     Validar Cupón 💰
+                  </button>
+                  <button
+                    className="nav-tab-button"
+                    style={{ color: '#ff4d4d', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', border: 'none', background: 'none' }}
+                    onClick={handleAdminLogout}
+                    title="Cerrar sesión administrative"
+                  >
+                    Salir 🚪
                   </button>
                 </div>
 
@@ -1575,6 +2191,28 @@ export default function Home() {
                         </div>
                       </div>
 
+                      <div className="form-group" style={{ borderTop: '2px solid #222', marginTop: '1.25rem', paddingTop: '1.25rem' }}>
+                        <span className="form-label">Servidor de Correos (Notificación Instantánea SMTP)</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '0.35rem' }}>
+                          <input
+                            type="checkbox"
+                            id="admin-email-toggle"
+                            checked={adminEmailNotifyToggled}
+                            onChange={(e) => {
+                              setAdminEmailNotifyToggled(e.target.checked);
+                              persistState('raspa_adminEmailToggle', e.target.checked ? 'true' : 'false');
+                            }}
+                            style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                          />
+                          <label htmlFor="admin-email-toggle" style={{ fontSize: '0.75rem', color: '#fff', cursor: 'pointer', margin: 0, fontWeight: 'bold' }}>
+                            Enviar notificación por correo al jugador cuando gane un premio
+                          </label>
+                        </div>
+                        <p style={{ fontSize: '0.65rem', color: '#888', marginTop: '4px', margin: 0 }}>
+                          Si el jugador activa la opción &quot;Quiero recibir por correo...&quot; en su formulario, nuestro simulador enviará un correo certificado a su buzón.
+                        </p>
+                      </div>
+
                       <button type="submit" className="btn btn-primary text-xs">
                         Guardar Ajustes de Campaña
                       </button>
@@ -1617,6 +2255,8 @@ export default function Home() {
                         </div>
                       </form>
                     </div>
+
+                    {renderWinningTrendsChart()}
                   </div>
                 )}
 
@@ -1650,7 +2290,7 @@ export default function Home() {
 
                     <div className="form-group">
                       <label className="form-label">Paleta de Colores de Marca</label>
-                      <div className="color-picker-row mb-4">
+                      <div className="color-picker-row mb-2">
                         <button
                           type="button"
                           className={`color-preset-btn btn-red-preset ${themeSelected === 'prime' ? 'selected' : ''}`}
@@ -1684,6 +2324,25 @@ export default function Home() {
                           {themeSelected === 'organic' && <Check size={16} />}
                         </button>
                       </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', borderTop: '1px dashed #222', paddingTop: '8px' }}>
+                        <input
+                          type="checkbox"
+                          id="auto-dark-mode-branding"
+                          checked={autoDarkMode}
+                          onChange={(e) => {
+                            setAutoDarkMode(e.target.checked);
+                            persistState('raspa_autoDark', e.target.checked ? 'true' : 'false');
+                          }}
+                          style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                        />
+                        <label htmlFor="auto-dark-mode-branding" style={{ fontSize: '0.75rem', color: '#fff', cursor: 'pointer', margin: 0, fontWeight: 'bold' }}>
+                          🌓 Modo Oscuro Inteligente (Detectar Tema del Sistema)
+                        </label>
+                      </div>
+                      <p style={{ fontSize: '0.65rem', color: '#888', marginTop: '4px', margin: 0 }}>
+                        Si se activa, el diseño de la aplicación cambiará automáticamente entre el modo oscuro por defecto y un tema claro según las preferencias globales del dispositivo del usuario.
+                      </p>
                     </div>
 
                     <div className="form-group">
@@ -1947,6 +2606,8 @@ export default function Home() {
                   ))}
                 </div>
               </div>
+                </>
+              )}
             </div>
 
             {/* Right Column: Visual smartphone mock preview */}
@@ -2014,14 +2675,7 @@ export default function Home() {
                   </div>
 
                   {!clientRegistered ? (
-                    <div style={{
-                      padding: '1rem',
-                      margin: '1rem 1.25rem',
-                      backgroundColor: '#16161a',
-                      border: '1px solid #27272a',
-                      borderRadius: '6px',
-                      color: '#fff'
-                    }}>
+                    <div className="client-form-card" style={{ padding: '1.25rem 1rem', margin: '1rem 1.25rem' }}>
                       <h3 style={{
                         fontFamily: "'Space Grotesk', sans-serif",
                         fontSize: '0.85rem',
@@ -2029,97 +2683,104 @@ export default function Home() {
                         textAlign: 'center',
                         textTransform: 'uppercase',
                         marginBottom: '0.5rem',
-                        color: 'var(--theme-accent)'
+                        color: 'var(--theme-accent)',
+                        letterSpacing: '-0.2px'
                       }}>
-                        Registro del Participante
+                        🎟️ Boleta del Participante
                       </h3>
-                      <p style={{ fontSize: '0.65rem', color: '#a1a1aa', textAlign: 'center', marginBottom: '0.85rem' }}>
+                      <p style={{ fontSize: '0.65rem', color: '#a1a1aa', textAlign: 'center', marginBottom: '1rem', lineHeight: '1.4' }}>
                         Ingresá tus datos para activar tu raspadita virtual y registrar tu participación en {shopName || 'el Comercio'}.
                       </p>
 
-                      <form onSubmit={handleRegisterParticipant} style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      <form onSubmit={handleRegisterParticipant} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                         <div>
-                          <label style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>
+                          <label style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>
                             Nombre y Apellido *
                           </label>
-                          <input
-                            type="text"
-                            required
-                            value={clientRegName}
-                            onChange={(e) => setClientRegName(e.target.value)}
-                            placeholder="Juan Pérez"
-                            style={{
-                              width: '100%',
-                              backgroundColor: '#0a0a0c',
-                              border: '1px solid #3f3f46',
-                              borderRadius: '4px',
-                              padding: '0.45rem',
-                              color: '#fff',
-                              fontSize: '0.75rem'
-                            }}
-                          />
+                          <div className="client-form-input-container">
+                            <span className="client-form-input-icon"><User size={12} /></span>
+                            <input
+                              type="text"
+                              required
+                              value={clientRegName}
+                              onChange={(e) => setClientRegName(e.target.value)}
+                              placeholder="Juan Pérez"
+                              className="client-form-input animate-all"
+                              style={{ padding: '0.55rem 0.65rem 0.55rem 2rem', fontSize: '0.75rem' }}
+                            />
+                          </div>
                         </div>
 
                         <div>
-                          <label style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>
+                          <label style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>
                             Celular / WhatsApp *
                           </label>
-                          <input
-                            type="tel"
-                            required
-                            value={clientRegPhone}
-                            onChange={(e) => setClientRegPhone(e.target.value)}
-                            placeholder="+54 9 11 ..."
-                            style={{
-                              width: '100%',
-                              backgroundColor: '#0a0a0c',
-                              border: '1px solid #3f3f46',
-                              borderRadius: '4px',
-                              padding: '0.45rem',
-                              color: '#fff',
-                              fontSize: '0.75rem'
-                            }}
-                          />
+                          <div className="client-form-input-container">
+                            <span className="client-form-input-icon"><Smartphone size={12} /></span>
+                            <input
+                              type="tel"
+                              required
+                              value={clientRegPhone}
+                              onChange={(e) => setClientRegPhone(e.target.value)}
+                              placeholder="+54 9 11 ..."
+                              className="client-form-input animate-all"
+                              style={{ padding: '0.55rem 0.65rem 0.55rem 2rem', fontSize: '0.75rem' }}
+                            />
+                          </div>
                         </div>
 
                         <div>
-                          <label style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '2px' }}>
-                            Email (Opcional)
+                          <label style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                            Email {sendEmailConfirmation ? '*' : '(Opcional)'}
                           </label>
+                          <div className="client-form-input-container">
+                            <span className="client-form-input-icon"><Mail size={12} /></span>
+                            <input
+                              type="email"
+                              required={sendEmailConfirmation}
+                              value={clientRegEmail}
+                              onChange={(e) => setClientRegEmail(e.target.value)}
+                              placeholder="juan@ejemplo.com"
+                              className="client-form-input animate-all"
+                              style={{ padding: '0.55rem 0.65rem 0.55rem 2rem', fontSize: '0.75rem' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '2px', backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.4rem', borderRadius: '4px', border: '1px solid #27272a' }}>
                           <input
-                            type="email"
-                            value={clientRegEmail}
-                            onChange={(e) => setClientRegEmail(e.target.value)}
-                            placeholder="juan@ejemplo.com"
-                            style={{
-                              width: '100%',
-                              backgroundColor: '#0a0a0c',
-                              border: '1px solid #3f3f46',
-                              borderRadius: '4px',
-                              padding: '0.45rem',
-                              color: '#fff',
-                              fontSize: '0.75rem'
+                            type="checkbox"
+                            id="send-email-conf-1"
+                            checked={sendEmailConfirmation}
+                            onChange={(e) => {
+                              setSendEmailConfirmation(e.target.checked);
+                              persistState('raspa_sendEmailConf', e.target.checked ? 'true' : 'false');
                             }}
+                            style={{ cursor: 'pointer', width: '13px', height: '13px', marginTop: '1px' }}
                           />
+                          <label htmlFor="send-email-conf-1" style={{ fontSize: '0.6rem', color: '#d4d4d8', cursor: 'pointer', userSelect: 'none', margin: 0, lineHeight: '1.3' }}>
+                            Quiero recibir por correo la confirmación de mi premio
+                          </label>
                         </div>
 
                         <button
                           type="submit"
                           style={{
-                            marginTop: '0.5rem',
+                            marginTop: '0.25rem',
                             backgroundColor: 'var(--theme-primary)',
                             color: '#000',
                             fontWeight: '900',
                             fontFamily: "'Space Grotesk', sans-serif",
-                            fontSize: '0.7rem',
-                            padding: '0.55rem',
-                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            padding: '0.65rem',
+                            borderRadius: '6px',
                             border: 'none',
                             cursor: 'pointer',
                             textTransform: 'uppercase',
                             letterSpacing: '0.04em',
-                            transition: 'all 0.1s ease',
-                            width: '100%'
+                            transition: 'all 0.15s ease',
+                            width: '100%',
+                            boxShadow: '0 3px 5px -1px rgba(0, 0, 0, 0.4)'
                           }}
                         >
                           Someter y Jugar Ya 🎰
@@ -2302,111 +2963,109 @@ export default function Home() {
               </div>
 
               {!clientRegistered ? (
-                <div style={{
-                  padding: '1.25rem',
-                  backgroundColor: '#16161a',
-                  border: '1px solid #27272a',
-                  borderRadius: '8px',
-                  color: '#fff'
-                }}>
+                <div className="client-form-card" style={{ padding: '2rem 1.5rem', margin: '1rem 1.25rem' }}>
                   <h3 style={{
                     fontFamily: "'Space Grotesk', sans-serif",
-                    fontSize: '0.95rem',
+                    fontSize: '1rem',
                     fontWeight: '900',
                     textAlign: 'center',
                     textTransform: 'uppercase',
                     marginBottom: '0.5rem',
-                    color: 'var(--theme-accent)'
+                    color: 'var(--theme-accent)',
+                    letterSpacing: '-0.2px'
                   }}>
-                    Registro del Participante
+                    🎟️ Boleta del Participante
                   </h3>
-                  <p style={{ fontSize: '0.725rem', color: '#a1a1aa', textAlign: 'center', marginBottom: '1rem' }}>
+                  <p style={{ fontSize: '0.725rem', color: '#a1a1aa', textAlign: 'center', marginBottom: '1.5rem', lineHeight: '1.4' }}>
                     Ingresá tus datos para activar tu raspadita virtual y registrar tu participación en {shopName || 'el Comercio'}.
                   </p>
 
-                  <form onSubmit={handleRegisterParticipant} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <form onSubmit={handleRegisterParticipant} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div>
-                      <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                      <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>
                         Nombre y Apellido *
                       </label>
-                      <input
-                        type="text"
-                        required
-                        value={clientRegName}
-                        onChange={(e) => setClientRegName(e.target.value)}
-                        placeholder="Juan Pérez"
-                        style={{
-                          width: '100%',
-                          backgroundColor: '#0a0a0c',
-                          border: '1px solid #3f3f46',
-                          borderRadius: '6px',
-                          padding: '0.55rem',
-                          color: '#fff',
-                          fontSize: '0.8rem'
-                        }}
-                      />
+                      <div className="client-form-input-container">
+                        <span className="client-form-input-icon"><User size={14} /></span>
+                        <input
+                          type="text"
+                          required
+                          value={clientRegName}
+                          onChange={(e) => setClientRegName(e.target.value)}
+                          placeholder="Juan Pérez"
+                          className="client-form-input"
+                        />
+                      </div>
                     </div>
 
                     <div>
-                      <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                      <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>
                         Celular / WhatsApp *
                       </label>
-                      <input
-                        type="tel"
-                        required
-                        value={clientRegPhone}
-                        onChange={(e) => setClientRegPhone(e.target.value)}
-                        placeholder="+54 9 11 ..."
-                        style={{
-                          width: '100%',
-                          backgroundColor: '#0a0a0c',
-                          border: '1px solid #3f3f46',
-                          borderRadius: '6px',
-                          padding: '0.55rem',
-                          color: '#fff',
-                          fontSize: '0.8rem'
-                        }}
-                      />
+                      <div className="client-form-input-container">
+                        <span className="client-form-input-icon"><Smartphone size={14} /></span>
+                        <input
+                          type="tel"
+                          required
+                          value={clientRegPhone}
+                          onChange={(e) => setClientRegPhone(e.target.value)}
+                          placeholder="+54 9 11 ..."
+                          className="client-form-input"
+                        />
+                      </div>
                     </div>
 
                     <div>
-                      <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
-                        Email (Opcional)
+                      <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                        Email {sendEmailConfirmation ? '*' : '(Opcional)'}
                       </label>
+                      <div className="client-form-input-container">
+                        <span className="client-form-input-icon"><Mail size={14} /></span>
+                        <input
+                          type="email"
+                          required={sendEmailConfirmation}
+                          value={clientRegEmail}
+                          onChange={(e) => setClientRegEmail(e.target.value)}
+                          placeholder="juan@ejemplo.com"
+                          className="client-form-input"
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginTop: '4px', backgroundColor: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '6px', border: '1px solid #27272a' }}>
                       <input
-                        type="email"
-                        value={clientRegEmail}
-                        onChange={(e) => setClientRegEmail(e.target.value)}
-                        placeholder="juan@ejemplo.com"
-                        style={{
-                          width: '100%',
-                          backgroundColor: '#0a0a0c',
-                          border: '1px solid #3f3f46',
-                          borderRadius: '6px',
-                          padding: '0.55rem',
-                          color: '#fff',
-                          fontSize: '0.8rem'
+                        type="checkbox"
+                        id="send-email-conf-2"
+                        checked={sendEmailConfirmation}
+                        onChange={(e) => {
+                          setSendEmailConfirmation(e.target.checked);
+                          persistState('raspa_sendEmailConf', e.target.checked ? 'true' : 'false');
                         }}
+                        style={{ cursor: 'pointer', width: '15px', height: '15px', marginTop: '2px' }}
                       />
+                      <label htmlFor="send-email-conf-2" style={{ fontSize: '0.68rem', color: '#d4d4d8', cursor: 'pointer', userSelect: 'none', margin: 0, lineHeight: '1.3' }}>
+                        Quiero recibir por correo la confirmación de mi premio
+                      </label>
                     </div>
 
                     <button
                       type="submit"
                       style={{
-                        marginTop: '0.75rem',
+                        marginTop: '0.5rem',
                         backgroundColor: 'var(--theme-primary)',
                         color: '#000',
                         fontWeight: '900',
                         fontFamily: "'Space Grotesk', sans-serif",
-                        fontSize: '0.8rem',
-                        padding: '0.65rem',
+                        fontSize: '0.85rem',
+                        padding: '0.8rem',
                         borderRadius: '6px',
                         border: 'none',
                         cursor: 'pointer',
                         textTransform: 'uppercase',
                         letterSpacing: '0.04em',
-                        transition: 'all 0.1s ease',
-                        width: '100%'
+                        transition: 'all 0.15s ease',
+                        width: '100%',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.4)'
                       }}
                     >
                       Someter y Jugar Ya 🎰
@@ -2556,8 +3215,13 @@ export default function Home() {
         {/* VIEW 3: STRICT ADMIN-ONLY VIEW AREA */}
         {selectedView === 'admin' && (
           <div className="workspace-single flex flex-col gap-4" id="admin-only-dashboard">
-            
-            {/* Campaign High-contrast Brutalist Hero Header */}
+            {!isAdminAuthenticated ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '65vh', width: '100%', padding: '2rem 1rem' }}>
+                {renderAdminLoginForm()}
+              </div>
+            ) : (
+              <>
+                {/* Campaign High-contrast Brutalist Hero Header */}
             <div className="card-panel" style={{ padding: '2rem', background: '#121212', border: '2px solid #222' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
@@ -2626,24 +3290,35 @@ export default function Home() {
                   </h2>
                 </div>
 
-                <div className="nav-tabs" style={{ marginBottom: '1.25rem', backgroundColor: '#1d1d21' }}>
+                <div className="nav-tabs" style={{ marginBottom: '1.25rem', backgroundColor: '#1d1d21', display: 'flex', flexWrap: 'wrap' }}>
                   <button
                     className={`nav-tab-button ${activeTabAdmin === 'dashboard' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
                     onClick={() => setActiveTabAdmin('dashboard')}
                   >
                     Campaña
                   </button>
                   <button
                     className={`nav-tab-button ${activeTabAdmin === 'branding' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
                     onClick={() => setActiveTabAdmin('branding')}
                   >
                     Marca & Estilo
                   </button>
                   <button
                     className={`nav-tab-button ${activeTabAdmin === 'prizes' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
                     onClick={() => setActiveTabAdmin('prizes')}
                   >
                     Premios & Probabilidades
+                  </button>
+                  <button
+                    className="nav-tab-button"
+                    style={{ color: '#ff4d4d', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', border: 'none', background: 'none' }}
+                    onClick={handleAdminLogout}
+                    title="Cerrar sesión administrative"
+                  >
+                    Salir 🚪
                   </button>
                 </div>
 
@@ -2689,6 +3364,28 @@ export default function Home() {
                         </button>
                       </div>
 
+                      <div className="form-group" style={{ borderTop: '2px solid #222', marginTop: '1.25rem', paddingTop: '1.25rem' }}>
+                        <span className="form-label">Servidor de Correos (Notificación Instantánea SMTP)</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '0.35rem' }}>
+                          <input
+                            type="checkbox"
+                            id="admin-email-toggle-2"
+                            checked={adminEmailNotifyToggled}
+                            onChange={(e) => {
+                              setAdminEmailNotifyToggled(e.target.checked);
+                              persistState('raspa_adminEmailToggle', e.target.checked ? 'true' : 'false');
+                            }}
+                            style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                          />
+                          <label htmlFor="admin-email-toggle-2" style={{ fontSize: '0.75rem', color: '#fff', cursor: 'pointer', margin: 0, fontWeight: 'bold' }}>
+                            Enviar notificación por correo al jugador cuando gane un premio
+                          </label>
+                        </div>
+                        <p style={{ fontSize: '0.65rem', color: '#888', marginTop: '4px', margin: 0 }}>
+                          Si el jugador activa la opción &quot;Quiero recibir por correo...&quot; en su formulario, nuestro simulador enviará un correo certificado a su buzón.
+                        </p>
+                      </div>
+
                       <button type="submit" className="btn btn-primary text-xs">
                         Guardar Ajustes
                       </button>
@@ -2721,6 +3418,8 @@ export default function Home() {
                         <Bell size={12} /> Disparar en la simulación
                       </button>
                     </div>
+
+                    {renderWinningTrendsChart()}
                   </div>
                 )}
 
@@ -2749,7 +3448,7 @@ export default function Home() {
 
                     <div className="form-group">
                       <label className="form-label">Paleta Cromática de Marca</label>
-                      <div className="color-picker-row mb-4">
+                      <div className="color-picker-row mb-2">
                         <button
                           type="button"
                           className={`color-preset-btn btn-red-preset ${themeSelected === 'prime' ? 'selected' : ''}`}
@@ -2779,6 +3478,25 @@ export default function Home() {
                           {themeSelected === 'organic' && <Check size={16} />}
                         </button>
                       </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', borderTop: '1px dashed #222', paddingTop: '8px' }}>
+                        <input
+                          type="checkbox"
+                          id="auto-dark-mode-branding-2"
+                          checked={autoDarkMode}
+                          onChange={(e) => {
+                            setAutoDarkMode(e.target.checked);
+                            persistState('raspa_autoDark', e.target.checked ? 'true' : 'false');
+                          }}
+                          style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                        />
+                        <label htmlFor="auto-dark-mode-branding-2" style={{ fontSize: '0.75rem', color: '#fff', cursor: 'pointer', margin: 0, fontWeight: 'bold' }}>
+                          🌓 Modo Oscuro Inteligente (Detectar Tema del Sistema)
+                        </label>
+                      </div>
+                      <p style={{ fontSize: '0.65rem', color: '#888', marginTop: '4px', margin: 0 }}>
+                        Si se activa, el diseño de la aplicación cambiará automáticamente entre el modo oscuro por defecto y un tema claro según las preferencias globales del dispositivo del usuario.
+                      </p>
                     </div>
 
                     <div className="logo-icon-grid mb-4">
@@ -2896,6 +3614,8 @@ export default function Home() {
               </div>
 
             </div>
+              </>
+            )}
           </div>
         )}
 
@@ -2905,6 +3625,193 @@ export default function Home() {
       <footer style={{ padding: '1rem', borderTop: '1px solid #1e1e24', textAlign: 'center', fontSize: '0.7rem', color: '#71717a' }}>
         Plataforma Express de Raspajuegos Virtuales - {shopName} © {new Date().getFullYear()}
       </footer>
+
+      {/* ONBOARDING MODAL OVERLAY */}
+      {showOnboarding && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '1.5rem'
+          }}
+        >
+          <div
+            className="card-panel"
+            style={{
+              maxWidth: '480px',
+              width: '100%',
+              backgroundColor: '#121212',
+              border: '2px solid var(--theme-primary)',
+              borderRadius: '8px',
+              padding: '2rem',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.5)',
+              textAlign: 'center'
+            }}
+          >
+            <div
+              style={{
+                width: '60px',
+                height: '60px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--theme-primary-light)',
+                color: 'var(--theme-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 1.5rem',
+                fontSize: '2rem'
+              }}
+            >
+              🍖
+            </div>
+            <h2
+              style={{
+                fontFamily: '"Space Grotesk", sans-serif',
+                fontSize: '1.6rem',
+                fontWeight: 900,
+                color: '#fff',
+                marginBottom: '1rem',
+                textTransform: 'uppercase',
+                letterSpacing: '-0.5px'
+              }}
+            >
+              ¡Bienvenido a la Raspa Digital!
+            </h2>
+            <p style={{ color: '#d4d4d8', fontSize: '0.85rem', lineHeight: '1.5', marginBottom: '1.5rem' }}>
+              Poné a prueba tu suerte con nuestro raspadita digital. Conseguí descuentos y cortes de carne premium en un instante.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', textAlign: 'left', marginBottom: '2rem', backgroundColor: '#0a0a0c', padding: '1rem', borderRadius: '4px', border: '1px solid #222' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <span style={{ backgroundColor: 'var(--theme-primary)', color: '#000', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, justifyContent: 'center', marginTop: '2px' }}>1</span>
+                <div>
+                  <h4 style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', margin: '0 0 2px' }}>Completá tu registro</h4>
+                  <p style={{ color: '#a1a1aa', fontSize: '0.7rem', margin: 0 }}>Ingresá tu nombre y celular (u opcionalmente tu email si querés confirmación por correo) para comenzar.</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <span style={{ backgroundColor: 'var(--theme-primary)', color: '#000', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, justifyContent: 'center', marginTop: '2px' }}>2</span>
+                <div>
+                  <h4 style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', margin: '0 0 2px' }}>¡Raspá la tarjeta!</h4>
+                  <p style={{ color: '#a1a1aa', fontSize: '0.7rem', margin: 0 }}>Arrastrá el dedo o el mouse sobre la superficie rugosa gris de la tarjeta para descubrir tu suerte.</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <span style={{ backgroundColor: 'var(--theme-primary)', color: '#000', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, justifyContent: 'center', marginTop: '2px' }}>3</span>
+                <div>
+                  <h4 style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', margin: '0 0 2px' }}>Canjeá tu Cupón Único</h4>
+                  <p style={{ color: '#a1a1aa', fontSize: '0.7rem', margin: 0 }}>Mostrá el código de cupón generado instantáneamente en caja para reclamar tu premio.</p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', fontFamily: '"Space Grotesk", sans-serif', fontWeight: 'bold', textTransform: 'uppercase' }}
+              onClick={() => {
+                setShowOnboarding(false);
+                try {
+                  localStorage.setItem('raspa_onboarded', 'true');
+                } catch (_) {}
+              }}
+            >
+              ¡Entendido, a Jugar!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* simulated SMTP mail client popup */}
+      {emailNotificationToast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '25px',
+            width: '380px',
+            backgroundColor: '#0c0c0e',
+            border: '2px solid #22c55e',
+            borderRadius: '6px',
+            zIndex: 99999,
+            color: '#fff',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.4)',
+            overflow: 'hidden',
+            fontFamily: 'monospace'
+          }}
+        >
+          <div style={{ backgroundColor: '#131316', borderBottom: '1px solid #22c55e', padding: '0.5rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', color: '#22c55e', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ backgroundColor: '#22c55e', width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block' }} />
+              SMTP EXPRESS ENVIADO (Simulación)
+            </span>
+            <button
+              onClick={() => setEmailNotificationToast(null)}
+              style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '0.8rem' }}
+            >
+              [X]
+            </button>
+          </div>
+          <div style={{ padding: '0.75rem', fontSize: '0.7rem', color: '#f4f4f5', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div><span style={{ color: '#a1a1aa' }}>Para:</span> <span style={{ color: '#4ade80' }}>&lt;{emailNotificationToast.to}&gt;</span></div>
+            <div><span style={{ color: '#a1a1aa' }}>Asunto:</span> <span style={{ fontWeight: 'bold' }}>{emailNotificationToast.subject}</span></div>
+            <div style={{ borderTop: '1px dashed #222', marginTop: '4px', paddingTop: '6px', whiteSpace: 'pre-wrap', color: '#e4e4e7', fontFamily: 'sans-serif', fontSize: '0.75rem', lineHeight: '1.4' }}>
+              {emailNotificationToast.body}
+            </div>
+            <div style={{ borderTop: '1px solid #1c1c1f', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#666', fontSize: '0.6rem' }}>Servidor: mock-smtp.raspadigital.local</span>
+              <button
+                style={{
+                  backgroundColor: '#22c55e',
+                  color: '#000',
+                  border: 'none',
+                  fontSize: '0.65rem',
+                  fontWeight: 'bold',
+                  padding: '2px 8px',
+                  borderRadius: '2px',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setEmailNotificationToast(null)}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating help re-trigger */}
+      <button
+        style={{
+          position: 'fixed',
+          bottom: '16px',
+          left: '16px',
+          width: '32px',
+          height: '32px',
+          borderRadius: '50%',
+          backgroundColor: '#18181b',
+          border: '1px solid #27272a',
+          color: '#a1a1aa',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: 888,
+          fontSize: '0.9rem',
+          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+        }}
+        onClick={() => setShowOnboarding(true)}
+        title="Mostrar guía de ayuda para raspar"
+      >
+        ?
+      </button>
 
     </div>
   );

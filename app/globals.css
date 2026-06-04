@@ -1177,3 +1177,228 @@ body {
   background-color: var(--theme-primary-light);
   color: #ffffff;
 }
+
+/* Light Mode Elegant Overrides for Auto Dark/Light Setting */
+.mode-light {
+  background-color: #fafafa !important;
+  color: #18181b !important;
+}
+.mode-light body {
+  background-color: #fafafa !important;
+  color: #18181b !important;
+}
+.mode-light .top-navbar {
+  background-color: #ffffff !important;
+  border-bottom: 2px solid #e4e4e7 !important;
+}
+.mode-light .nav-brand-title {
+  color: #000000 !important;
+}
+.mode-light .nav-tabs {
+  background-color: #f4f4f5 !important;
+  border-color: #e4e4e7 !important;
+}
+.mode-light .nav-tab-button {
+  color: #71717a !important;
+}
+.mode-light .nav-tab-button:hover {
+  color: #000000 !important;
+}
+.mode-light .nav-tab-button.active {
+  color: #000000 !important;
+}
+.mode-light .card-panel {
+  background-color: #ffffff !important;
+  border-color: #e4e4e7 !important;
+  color: #18181b !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+}
+.mode-light .stat-card {
+  background-color: #ffffff !important;
+  border-color: #e4e4e7 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+}
+.mode-light .stat-label {
+  color: #71717a !important;
+}
+.mode-light .stat-value {
+  color: #09090b !important;
+}
+.mode-light .stat-icon-wrap {
+  background-color: #f4f4f5 !important;
+  color: var(--theme-primary) !important;
+  border-color: #e4e4e7 !important;
+}
+.mode-light .workspace-split {
+  background-color: #fbfbfb !important;
+}
+.mode-light .recent-redeemed-panel {
+  background-color: #ffffff !important;
+  border-color: #e4e4e7 !important;
+}
+.mode-light .recent-redeemed-item {
+  border-color: #e4e4e7 !important;
+  background-color: #fafafa !important;
+}
+.mode-light .activity-user {
+  color: #18181b !important;
+}
+.mode-light .activity-subtitle {
+  color: #71717a !important;
+}
+.mode-light .activity-subtitle span {
+  color: #09090b !important;
+}
+.mode-light .workspace-grid {
+  background-color: #fbfbfb !important;
+}
+.mode-light .admin-settings-container {
+  background-color: #fbfbfb !important;
+}
+.mode-light .admin-panel-tabs {
+  border-bottom-color: #e4e4e7 !important;
+}
+.mode-light .admin-tab-btn {
+  color: #71717a !important;
+}
+.mode-light .admin-tab-btn:hover {
+  color: #000000 !important;
+}
+.mode-light .admin-tab-btn.active {
+  color: var(--theme-primary) !important;
+  border-bottom-color: var(--theme-primary) !important;
+}
+.mode-light .form-label {
+  color: #27272a !important;
+}
+.mode-light .form-input {
+  background-color: #ffffff !important;
+  border: 1px solid #d4d4d8 !important;
+  color: #09090b !important;
+}
+.mode-light .form-input:focus {
+  border-color: var(--theme-primary) !important;
+  outline: none;
+}
+.mode-light .logo-option-item {
+  border-color: #e4e4e7 !important;
+  background-color: #fafafa !important;
+  color: #18181b !important;
+}
+.mode-light .logo-option-item:hover {
+  border-color: var(--theme-primary) !important;
+  background-color: #f4f4f5 !important;
+}
+.mode-light .logo-option-item.selected {
+  border-color: var(--theme-primary) !important;
+  background-color: var(--theme-primary-light) !important;
+  color: var(--theme-primary) !important;
+}
+.mode-light h1, .mode-light h2, .mode-light h3, .mode-light h4, .mode-light h5 {
+  color: #09090b !important;
+}
+
+/* Premium Player Area Design Optimization (No Tailwind) */
+.client-form-card {
+  background: radial-gradient(circle at 100% 0%, #191921 0%, #09090b 100%) !important;
+  border: 1.5px solid #2d2d34 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 15px 30px -10px rgba(0, 0, 0, 0.85) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.client-form-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--theme-primary) 0%, var(--theme-accent) 100%);
+}
+
+.client-form-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.client-form-input-icon {
+  position: absolute;
+  left: 10px;
+  color: #88888b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: color 0.15s ease;
+}
+
+.client-form-input {
+  background-color: #030304 !important;
+  border: 1px solid #3f3f46 !important;
+  border-radius: 6px !important;
+  padding: 0.65rem 0.75rem 0.65rem 2.25rem !important;
+  color: #ffffff !important;
+  font-size: 0.85rem !important;
+  font-family: 'Inter', sans-serif !important;
+  width: 100% !important;
+  transition: all 0.2s ease !important;
+  outline: none !important;
+}
+
+.client-form-input:focus {
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 0 2px var(--theme-primary-light) !important;
+}
+
+.client-form-input-container:focus-within .client-form-input-icon {
+  color: var(--theme-primary) !important;
+}
+
+.client-app-icon {
+  animation: floatBrandIcon 3.5s ease-in-out infinite !important;
+  box-shadow: 0 8px 16px -4px rgba(0,0,0,0.5) !important;
+}
+
+@keyframes floatBrandIcon {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.02);
+  }
+}
+
+.coupon-claimed-details {
+  border: 2px dashed var(--theme-primary) !important;
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 12px !important;
+  padding: 1.5rem 1.25rem !important;
+  box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.6) !important;
+  text-align: center;
+  position: relative;
+  overflow: visible !important;
+}
+
+.coupon-claimed-details::after {
+  content: '✂️ Cortar Cupón';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #0c0c0e;
+  padding: 0 10px;
+  font-size: 0.6rem;
+  font-family: 'Space Grotesk', sans-serif;
+  text-transform: uppercase;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: var(--theme-primary);
+  border: 1px dashed var(--theme-primary);
+  border-radius: 10px;
+}
+
