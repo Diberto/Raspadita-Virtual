@@ -43,6 +43,7 @@ import confetti from 'canvas-confetti';
 import { signInWithGoogleSheets, signOutGoogleSheets, createSheetsDocument, appendLeadToSheets } from '../lib/googleSheets';
 import GoogleSheetsConfig from '../components/GoogleSheetsConfig';
 import { Html5Qrcode } from 'html5-qrcode';
+import WinningCharts from '../components/WinningCharts';
 
 // -------------------------------------------------------------
 // Type Definitions
@@ -266,6 +267,7 @@ export default function Home() {
   const [scannerStatusMessage, setScannerStatusMessage] = useState('');
   const [triggerRestart, setTriggerRestart] = useState(0);
   const [isStrictClientUrl, setIsStrictClientUrl] = useState(false);
+  const [isStrictCashierUrl, setIsStrictCashierUrl] = useState(false);
   const lastFrameTimeRef = React.useRef<number>(0);
 
   // Onboarding modal configuration
@@ -318,6 +320,9 @@ export default function Home() {
         if (params.get('view') === 'client' || params.get('mode') === 'client' || params.get('game') === 'true') {
           setSelectedView('client');
           setIsStrictClientUrl(true);
+        } else if (params.get('view') === 'cashier' || params.get('mode') === 'cashier') {
+          setSelectedView('cashier');
+          setIsStrictCashierUrl(true);
         }
 
         const savedShopName = localStorage.getItem('raspa_shopName');
@@ -1425,191 +1430,12 @@ export default function Home() {
   const renderWinningTrendsChart = () => {
     if (winningHistory.length === 0) return null;
 
-    // Dimensions setup for clean SVG projection
-    const width = 500;
-    const height = 180;
-    const paddingLeft = 32;
-    const paddingRight = 16;
-    const paddingTop = 20;
-    const paddingBottom = 30;
-
-    const chartWidth = width - paddingLeft - paddingRight;
-    const chartHeight = height - paddingTop - paddingBottom;
-
-    // Determine values limits
-    const maxWins = Math.max(...winningHistory.map(d => d.wins), 10);
-    const minWins = 0;
-
-    const points = winningHistory.map((item, index) => {
-      const x = paddingLeft + (index / (winningHistory.length - 1)) * chartWidth;
-      const y = paddingTop + chartHeight - ((item.wins - minWins) / (maxWins - minWins)) * chartHeight;
-      return { x, y, ...item, index };
-    });
-
-    // Stroke layout outline string
-    const dLine = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-
-    // Highlight area shader boundings
-    const dArea = `${dLine} L ${points[points.length - 1].x} ${paddingTop + chartHeight} L ${points[0].x} ${paddingTop + chartHeight} Z`;
-
     return (
-      <div 
-        className="card-panel" 
-        style={{ 
-          background: '#121214', 
-          border: '1px solid #222', 
-          borderRadius: '6px', 
-          padding: '1.25rem', 
-          marginTop: '1.5rem',
-          position: 'relative'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <div>
-            <h4 style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 'bold', margin: '0' }}>📈 Tendencias de Ganadores (Últimos 7 días)</h4>
-            <p style={{ fontSize: '0.65rem', color: '#888', margin: '2px 0 0' }}>Premios entregados por jornada en tienda física</p>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', fontSize: '0.65rem' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: 8, height: 8, backgroundColor: 'var(--theme-primary)', borderRadius: '50%' }} />
-              Ganados
-            </span>
-          </div>
-        </div>
-
-        <div style={{ position: 'relative' }}>
-          <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="auto" style={{ overflow: 'visible' }}>
-            <defs>
-              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--theme-primary)" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="var(--theme-primary)" stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
-
-            {/* Grid lines */}
-            {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
-              const y = paddingTop + ratio * chartHeight;
-              const val = Math.round(maxWins - ratio * (maxWins - minWins));
-              return (
-                <g key={i}>
-                  <line 
-                    x1={paddingLeft} 
-                    y1={y} 
-                    x2={width - paddingRight} 
-                    y2={y} 
-                    stroke="#1e1e24" 
-                    strokeWidth="1" 
-                    strokeDasharray="2 4" 
-                  />
-                  <text 
-                    x={paddingLeft - 6} 
-                    y={y + 3} 
-                    fill="#666" 
-                    fontSize="8" 
-                    fontFamily="monospace" 
-                    textAnchor="end"
-                  >
-                    {val}
-                  </text>
-                </g>
-              );
-            })}
-
-            {/* Trend Area Gradient */}
-            <path d={dArea} fill="url(#chartGradient)" />
-
-            {/* Trend Line */}
-            <path 
-              d={dLine} 
-              fill="none" 
-              stroke="var(--theme-primary)" 
-              strokeWidth="2.5" 
-              strokeLinecap="round"
-              strokeLinejoin="round" 
-            />
-
-            {/* Hover tooltip line indicator */}
-            {activeHoverIndex !== null && points[activeHoverIndex] && (
-              <line 
-                x1={points[activeHoverIndex].x} 
-                y1={paddingTop} 
-                x2={points[activeHoverIndex].x} 
-                y2={paddingTop + chartHeight} 
-                stroke="rgba(255, 255, 255, 0.15)" 
-                strokeWidth="1" 
-              />
-            )}
-
-            {/* Points circles */}
-            {points.map((p, i) => (
-              <g 
-                key={i}
-                onMouseEnter={() => setActiveHoverIndex(i)}
-                onMouseLeave={() => setActiveHoverIndex(null)}
-                style={{ cursor: 'pointer' }}
-              >
-                <circle 
-                  cx={p.x} 
-                  cy={p.y} 
-                  r={activeHoverIndex === i ? 6 : 4} 
-                  fill={activeHoverIndex === i ? 'var(--theme-primary)' : '#18181b'} 
-                  stroke="var(--theme-primary)" 
-                  strokeWidth="2" 
-                />
-                {/* Transparent overlay for easier hover interaction */}
-                <circle 
-                  cx={p.x} 
-                  cy={p.y} 
-                  r="12" 
-                  fill="transparent" 
-                />
-              </g>
-            ))}
-
-            {/* X Axis Labels */}
-            {points.map((p, i) => (
-              <text 
-                key={i} 
-                x={p.x} 
-                y={height - 8} 
-                fill="#666" 
-                fontSize="8" 
-                fontFamily="monospace" 
-                textAnchor="middle"
-              >
-                {p.date}
-              </text>
-            ))}
-          </svg>
-
-          {/* Chart Interactivity Tooltip Card */}
-          {activeHoverIndex !== null && points[activeHoverIndex] && (
-            <div 
-              style={{
-                position: 'absolute',
-                top: '10px',
-                left: `${(points[activeHoverIndex].x / width) * 100}%`,
-                transform: 'translateX(-50%)',
-                backgroundColor: '#18181c',
-                border: '1px solid var(--theme-primary)',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                color: '#fff',
-                fontSize: '0.65rem',
-                zIndex: 10,
-                pointerEvents: 'none',
-                boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
-                whiteSpace: 'nowrap',
-                fontFamily: 'monospace'
-              }}
-            >
-              <div style={{ color: 'var(--theme-primary)', fontWeight: 'bold' }}>{points[activeHoverIndex].date}</div>
-              <div>🏆 Ganados: <strong style={{ color: '#fff' }}>{points[activeHoverIndex].wins}</strong></div>
-              <div>⏳ Pendientes: <strong style={{ color: '#FFD700' }}>{points[activeHoverIndex].unclaimed}</strong></div>
-            </div>
-          )}
-        </div>
-      </div>
+      <WinningCharts 
+        winningHistory={winningHistory} 
+        prizes={prizes} 
+        themeSelected={themeSelected} 
+      />
     );
   };
 
@@ -1646,6 +1472,42 @@ export default function Home() {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        {(selectedView === 'admin' || selectedView === 'split') && (
+          <div className="card-panel" style={{ padding: '1.25rem', backgroundColor: '#131316', border: '2px dashed var(--theme-primary)', borderRadius: '6px', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ flex: '1 1 300px' }}>
+              <h4 style={{ fontSize: '0.85rem', color: 'var(--theme-accent)', fontWeight: 'bold', margin: '0 0 4px 0', textTransform: 'uppercase', fontFamily: '"Space Grotesk", sans-serif' }}>
+                🔗 Canal Independiente para Cajeros
+              </h4>
+              <p style={{ fontSize: '0.7rem', color: '#a1a1aa', margin: 0, lineHeight: '1.4' }}>
+                Los cajeros pueden acceder a la terminal de canje de forma independiente. Escaneá el código QR o abrí el enlace directo en la tablet o PC de caja para iniciar sesión sin que tengan acceso al administrador principal:
+              </p>
+              <div style={{ marginTop: '0.65rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <code style={{ fontSize: '0.7rem', backgroundColor: '#09090b', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #1e1e24', color: '#fff', wordBreak: 'break-all' }}>
+                  {appUrl + '?view=cashier'}
+                </code>
+                <button 
+                  className="btn btn-secondary text-xxs" 
+                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.65rem' }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(appUrl + '?view=cashier');
+                    alert('¡Enlace de cajeros copiado al portapapeles!');
+                  }}
+                >
+                  Copiar Enlace
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', backgroundColor: '#fff', padding: '6px', borderRadius: '4px', border: '1px solid #3f3f46' }}>
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(appUrl + '?view=cashier')}`}
+                alt="QR de Acceso para Cajeros"
+                style={{ width: '85px', height: '85px', display: 'block' }}
+              />
+              <span style={{ fontSize: '0.55rem', color: '#000', fontWeight: 'bold' }}>QR DE ACCESO</span>
+            </div>
+          </div>
+        )}
+
         {/* Terminal Manual y Camara Qr */}
         <div className="card-panel" style={{ padding: '1.25rem', backgroundColor: '#131316', border: '1px solid #222' }}>
           <h3 className="form-label" style={{ fontSize: '0.95rem', marginBottom: '0.25rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2108,7 +1970,7 @@ export default function Home() {
       `}} />
       
       {/* Top Navbar Header */}
-      {!isStrictClientUrl && (
+      {!isStrictClientUrl && !isStrictCashierUrl && (
         <header className="top-navbar" id="main-header-bar">
           <div className="nav-brand">
             <div className="stat-icon-wrap" style={{ width: 32, height: 32, color: '#fff', backgroundColor: 'var(--theme-primary)' }}>
@@ -3013,6 +2875,17 @@ export default function Home() {
                                 {customerCouponCode}
                               </div>
 
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0.75rem 0', padding: '0.75rem', background: '#1c1c1e', borderRadius: '8px', border: '1px solid #2d2d30' }}>
+                                <img 
+                                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(appUrl + '?code=' + (customerCouponCode || ''))}`}
+                                  alt="QR de Validación"
+                                  style={{ width: '120px', height: '120px', borderRadius: '4px', backgroundColor: '#fff', padding: '6px', display: 'block' }}
+                                />
+                                <span style={{ fontSize: '0.65rem', color: '#a1a1aa', marginTop: '6px', display: 'block', textAlign: 'center', fontWeight: 'bold' }}>
+                                  Presentá este código QR al cajero para validar tu premio 💰
+                                </span>
+                              </div>
+
                               <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
                                 <button
                                   className="btn btn-secondary text-xs"
@@ -3032,7 +2905,7 @@ export default function Home() {
                               </div>
 
                               <span className="coupon-action-hint">
-                                Mostrá este código al carnicero para canjear tu premio al instante.
+                                Mostrá este código o QR al cajero para canjear tu premio al instante.
                               </span>
                             </div>
                           ) : (
@@ -3303,6 +3176,17 @@ export default function Home() {
                             {customerCouponCode}
                           </div>
 
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0.75rem 0', padding: '0.75rem', background: '#1c1c1e', borderRadius: '8px', border: '1px solid #2d2d30' }}>
+                            <img 
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(appUrl + '?code=' + (customerCouponCode || ''))}`}
+                              alt="QR de Validación"
+                              style={{ width: '120px', height: '120px', borderRadius: '4px', backgroundColor: '#fff', padding: '6px', display: 'block' }}
+                            />
+                            <span style={{ fontSize: '0.65rem', color: '#a1a1aa', marginTop: '6px', display: 'block', textAlign: 'center', fontWeight: 'bold' }}>
+                              Presentá este código QR al cajero para validar tu premio 💰
+                            </span>
+                          </div>
+
                           <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
                             <button
                               className="btn btn-secondary text-xs"
@@ -3322,7 +3206,7 @@ export default function Home() {
                           </div>
 
                           <span className="coupon-action-hint" style={{ marginTop: '0.5rem' }}>
-                            Mostrá este código al carnicero para canjear tu premio al instante.
+                            Mostrá este código o QR al cajero para canjear tu premio al instante.
                           </span>
                         </div>
                       ) : (
