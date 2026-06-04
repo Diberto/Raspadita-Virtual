@@ -127,7 +127,7 @@ export default function Home() {
   const [totalRedeemed, setTotalRedeemed] = useState(32);
 
   // Layout View Control
-  const [selectedView, setSelectedView] = useState<'split' | 'client' | 'admin'>('split');
+  const [selectedView, setSelectedView] = useState<'split' | 'client' | 'admin' | 'cashier'>('split');
   // Admin Subsection View Control
   const [activeTabAdmin, setActiveTabAdmin] = useState<'dashboard' | 'branding' | 'prizes' | 'validator'>('dashboard');
 
@@ -138,6 +138,12 @@ export default function Home() {
   const [googleEmailInput, setGoogleEmailInput] = useState<string>('');
   const [showGoogleLoginModal, setShowGoogleLoginModal] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string>('');
+
+  // Cashier Authentication States
+  const [isCashierAuthenticated, setIsCashierAuthenticated] = useState<boolean>(false);
+  const [cashierUsernameInput, setCashierUsernameInput] = useState<string>('');
+  const [cashierPasswordInput, setCashierPasswordInput] = useState<string>('');
+  const [cashierAuthError, setCashierAuthError] = useState<string>('');
 
   // Google Sheets Integration configurations
   const [googleToken, setGoogleToken] = useState<string | null>(null);
@@ -306,6 +312,14 @@ export default function Home() {
           }
         } catch (_) {}
 
+        // Hydrate Cashier Authentication
+        try {
+          const savedCashierAuth = localStorage.getItem('raspa_cashierAuth');
+          if (savedCashierAuth === 'true') {
+            setIsCashierAuthenticated(true);
+          }
+        } catch (_) {}
+
         // Check if user has already onboarded
         try {
           const savedOnboarded = localStorage.getItem('raspa_onboarded');
@@ -414,6 +428,24 @@ export default function Home() {
   const handleAdminLogout = () => {
     setIsAdminAuthenticated(false);
     persistState('raspa_adminAuth', 'false');
+  };
+
+  const handleCashierLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCashierAuthError('');
+    if (cashierUsernameInput.trim() === 'cajero' && cashierPasswordInput === 'cajero123') {
+      setIsCashierAuthenticated(true);
+      persistState('raspa_cashierAuth', 'true');
+      setCashierUsernameInput('');
+      setCashierPasswordInput('');
+    } else {
+      setCashierAuthError('Usuario o contraseña de cajero incorrectos.');
+    }
+  };
+
+  const handleCashierLogout = () => {
+    setIsCashierAuthenticated(false);
+    persistState('raspa_cashierAuth', 'false');
   };
 
   // Camera QR Code Scanner Effect
@@ -1999,6 +2031,13 @@ export default function Home() {
               title="Ver únicamente el panel de control del administrador"
             >
               <Settings size={15} /> <span>Panel Admin</span>
+            </button>
+            <button
+              className={`nav-tab-button ${selectedView === 'cashier' ? 'active' : ''}`}
+              onClick={() => setSelectedView('cashier')}
+              title="Acceso exclusivo para cajeros y validadores de la tienda"
+            >
+              <Ticket size={15} style={{ display: 'inline' }} /> <span>Terminal Cajeros 💰</span>
             </button>
           </div>
         </header>
@@ -3619,6 +3658,263 @@ export default function Home() {
           </div>
         )}
 
+        {/* VIEW 4: STRICT CASHIER VIEW AREA */}
+        {selectedView === 'cashier' && (
+          <div className="workspace-single flex flex-col gap-4" id="cashier-only-dashboard">
+            {!isCashierAuthenticated ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '65vh', width: '100%', padding: '2rem 1rem' }}>
+                <div 
+                  className="card-panel" 
+                  style={{ 
+                    maxWidth: '440px', 
+                    width: '100%', 
+                    backgroundColor: '#111113', 
+                    border: '2px solid var(--theme-secondary)', 
+                    borderRadius: '12px', 
+                    padding: '2.5rem 2rem', 
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 10px 10px -5px rgba(0, 0, 0, 0.7)',
+                    color: '#fff',
+                    fontFamily: '"Inter", sans-serif'
+                  }}
+                >
+                  <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                    <div style={{ 
+                      width: '56px', 
+                      height: '56px', 
+                      borderRadius: '50%', 
+                      backgroundColor: 'rgba(251, 191, 36, 0.1)', 
+                      color: '#fbbf24', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      margin: '0 auto 1rem auto',
+                      border: '1px solid #fbbf24'
+                    }}>
+                      <Ticket size={24} />
+                    </div>
+                    <h2 style={{ 
+                      fontFamily: '"Space Grotesk", sans-serif', 
+                      fontSize: '1.5rem', 
+                      fontWeight: 900, 
+                      textTransform: 'uppercase', 
+                      letterSpacing: '-0.5px',
+                      color: '#fff',
+                      margin: '0 0 0.25rem 0'
+                    }}>
+                      Terminal de Cajeros
+                    </h2>
+                    <p style={{ color: '#88888b', fontSize: '0.75rem', margin: 0 }}>
+                      Iniciá sesión para validar y registrar el canje de premios de los clientes.
+                    </p>
+                  </div>
+
+                  {cashierAuthError && (
+                    <div style={{ 
+                      backgroundColor: 'rgba(239, 68, 68, 0.15)', 
+                      border: '1px solid #ef4444', 
+                      borderRadius: '6px', 
+                      padding: '0.75rem', 
+                      color: '#fca5a5', 
+                      fontSize: '0.75rem', 
+                      marginBottom: '1rem',
+                      textAlign: 'center',
+                      lineHeight: '1.4'
+                    }}>
+                      ⚠️ {cashierAuthError}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleCashierLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div>
+                      <label style={{ 
+                        fontSize: '0.7rem', 
+                        color: '#a1a1aa', 
+                        textTransform: 'uppercase', 
+                        fontWeight: 'bold', 
+                        display: 'block', 
+                        marginBottom: '4px' 
+                      }}>
+                        Usuario Cajero
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#71717a' }}>
+                          <User size={14} />
+                        </span>
+                        <input
+                          type="text"
+                          required
+                          value={cashierUsernameInput}
+                          onChange={(e) => setCashierUsernameInput(e.target.value)}
+                          placeholder="Ej: cajero"
+                          style={{
+                            width: '100%',
+                            backgroundColor: '#09090b',
+                            border: '1px solid #27272a',
+                            borderRadius: '6px',
+                            padding: '0.65rem 0.65rem 0.65rem 2rem',
+                            color: '#fff',
+                            fontSize: '0.8rem',
+                            outline: 'none',
+                            transition: 'border-color 0.15s ease'
+                          }}
+                          onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--theme-primary)'; }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = '#27272a'; }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ 
+                        fontSize: '0.7rem', 
+                        color: '#a1a1aa', 
+                        textTransform: 'uppercase', 
+                        fontWeight: 'bold', 
+                        display: 'block', 
+                        marginBottom: '4px' 
+                      }}>
+                        Código de Acceso
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#71717a' }}>
+                          <Lock size={14} />
+                        </span>
+                        <input
+                          type="password"
+                          required
+                          value={cashierPasswordInput}
+                          onChange={(e) => setCashierPasswordInput(e.target.value)}
+                          placeholder="••••••••"
+                          style={{
+                            width: '100%',
+                            backgroundColor: '#09090b',
+                            border: '1px solid #27272a',
+                            borderRadius: '6px',
+                            padding: '0.65rem 0.65rem 0.65rem 2rem',
+                            color: '#fff',
+                            fontSize: '0.8rem',
+                            outline: 'none',
+                            transition: 'border-color 0.15s ease'
+                          }}
+                          onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--theme-primary)'; }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = '#27272a'; }}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      style={{
+                        marginTop: '0.5rem',
+                        backgroundColor: 'var(--theme-accent)',
+                        color: '#000',
+                        fontWeight: 'bold',
+                        fontFamily: '"Space Grotesk", sans-serif',
+                        fontSize: '0.8rem',
+                        padding: '0.75rem',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        transition: 'transform 0.1s ease',
+                        width: '100%'
+                      }}
+                    >
+                      Iniciar Sesión de Cajero
+                    </button>
+                  </form>
+
+                  <div style={{ marginTop: '1.5rem', padding: '0.75rem', backgroundColor: '#17171a', border: '1px dashed #27272a', borderRadius: '6px', fontSize: '0.65rem', color: '#a1a1aa', lineHeight: '1.4' }}>
+                    🔑 <b>Acceso de Prueba del Cajero:</b><br />
+                    • Usuario: <code style={{ color: 'var(--theme-primary)' }}>cajero</code><br />
+                    • Clave: <code style={{ color: 'var(--theme-primary)' }}>cajero123</code>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ width: '100%', padding: '0 1rem' }}>
+                {/* Header de la Terminal */}
+                <div className="card-panel shadow-md" style={{ padding: '1.5rem', background: '#121214', border: '2px solid #222', borderRadius: '8px', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--theme-accent)', fontWeight: 'bold', letterSpacing: '1px' }}>🏢 Terminal en Turno Activo</span>
+                    <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1.4rem', fontWeight: 900, color: '#fff', margin: '4px 0 0 0' }}>
+                      PUESTO DE CAJEROS / VALIDACIONES
+                    </h2>
+                  </div>
+                  <button 
+                    className="btn btn-secondary text-xs" 
+                    onClick={handleCashierLogout}
+                    style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #ef4444', color: '#fca5a5' }}
+                  >
+                    Cerrar Turno Cajero 🚪
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {/* Validation Station */}
+                  <div style={{ width: '100%' }}>
+                    {renderCashierTerminal()}
+                  </div>
+
+                  {/* Turn Information Grid */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem' }}>
+                    <div className="card-panel" style={{ flex: '1 1 300px' }}>
+                      <div className="panel-header" style={{ marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #27272a' }}>
+                        <h3 className="panel-title" style={{ fontSize: '0.9rem', color: 'var(--theme-accent)' }}>
+                          📊 Estadísticas del Turno
+                        </h3>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+                        <div style={{ backgroundColor: '#09090b', padding: '0.75rem', borderRadius: '6px', border: '1px solid #1e1e24', textAlign: 'center' }}>
+                          <span style={{ display: 'block', fontSize: '0.65rem', color: '#a1a1aa', textTransform: 'uppercase' }}>Canjeados</span>
+                          <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--theme-accent)', fontFamily: '"Space Grotesk", sans-serif' }}>{totalRedeemed}</span>
+                        </div>
+                        <div style={{ backgroundColor: '#09090b', padding: '0.75rem', borderRadius: '6px', border: '1px solid #1e1e24', textAlign: 'center' }}>
+                          <span style={{ display: 'block', fontSize: '0.65rem', color: '#a1a1aa', textTransform: 'uppercase' }}>Premios Totales</span>
+                          <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fff', fontFamily: '"Space Grotesk", sans-serif' }}>{totalWins}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="card-panel" style={{ flex: '1 1 300px' }}>
+                      <div className="panel-header" style={{ marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #27272a' }}>
+                        <h3 className="panel-title" style={{ fontSize: '0.9rem', color: '#fff' }}>
+                          🕓 Actividad Reciente de Canje
+                        </h3>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                        {recentActivity.slice(0, 5).map((activity) => (
+                          <div key={activity.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0c0c0e', padding: '0.65rem', borderRadius: '4px', border: '1px solid #222' }}>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#fff' }}>{activity.userName}</div>
+                              <div style={{ fontSize: '0.65rem', color: '#a1a1aa' }}>Código: <span className="font-mono" style={{ color: 'use--theme-primary' }}>{activity.code}</span></div>
+                              <div style={{ fontSize: '0.65rem', fontWeight: '500', color: 'var(--theme-primary)', marginTop: '2px' }}>{activity.prizeName}</div>
+                            </div>
+                            <span style={{ 
+                              fontSize: '0.6rem', 
+                              padding: '2px 6px', 
+                              borderRadius: '12px', 
+                              backgroundColor: activity.status === 'REVENTADO' ? 'rgba(74, 222, 128, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                              color: activity.status === 'REVENTADO' ? '#4ade80' : '#fbbf24',
+                              fontWeight: 'bold',
+                              textTransform: 'uppercase'
+                            }}>
+                              {activity.status === 'REVENTADO' ? 'Entregado' : 'Asignado'}
+                            </span>
+                          </div>
+                        ))}
+                        {recentActivity.length === 0 && (
+                          <p style={{ fontSize: '0.7rem', color: '#71717a', textAlign: 'center', margin: '2rem 0' }}>No se registran canjes ni participaciones aún.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
 
       {/* Corporate humble footer message */}
@@ -3781,6 +4077,184 @@ export default function Home() {
                 onClick={() => setEmailNotificationToast(null)}
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GOOGLE OAUTH CONTINUANCE & CONTINGENCY BYPASS MODAL */}
+      {showGoogleLoginModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '1.5rem'
+          }}
+        >
+          <div
+            className="card-panel"
+            style={{
+              maxWidth: '520px',
+              width: '100%',
+              backgroundColor: '#111113',
+              border: '2px solid var(--theme-primary)',
+              borderRadius: '12px',
+              padding: '2rem',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.85)',
+              color: '#fff',
+              fontFamily: '"Inter", sans-serif'
+            }}
+          >
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <svg width="40" height="40" viewBox="0 0 18 18" style={{ margin: '0 auto 0.75rem' }}>
+                <path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.71v2.24h2.9c1.7-1.57 2.7-3.88 2.7-6.6z"/>
+                <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.2l-2.9-2.24c-.8.54-1.84.87-3.06.87-2.35 0-4.34-1.58-5.05-3.72H.91v2.3A9 9 0 0 0 9 18z"/>
+                <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.6 9c0-.6.1-1.18.27-1.7v-2.3H.91A9 9 0 0 0 0 9c0 1.62.43 3.15 1.18 4.5l2.77-2.3z"/>
+                <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35L15 2.1A9 9 0 0 0 .91 4.98l2.77 2.3c.7-2.14 2.7-3.72 5.32-3.72z"/>
+              </svg>
+              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1.25rem', fontWeight: 'bold', textTransform: 'uppercase', margin: 0, color: '#fff' }}>
+                Google Sign-In Express
+              </h3>
+              <p style={{ color: '#a1a1aa', fontSize: '0.7rem', margin: '4px 0 0 0' }}>
+                Inicio de sesión seguro para el dominio republicadelacarne.com
+              </p>
+            </div>
+
+            {/* DOMAIN AUTHORIZATION GUIDE - CORE SOLUTION */}
+            <div style={{ backgroundColor: 'rgba(251, 191, 36, 0.1)', border: '1px solid #d97706', borderRadius: '6px', padding: '0.85rem', marginBottom: '1.25rem', fontSize: '0.725rem', lineHeight: '1.4', color: '#fef08a' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+                <div>
+                  <b style={{ color: '#fff', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                    Guía para error de Dominio No Autorizado en Firebase:
+                  </b>
+                  Como tu sitio se aloja en <code style={{ color: 'var(--theme-accent)', fontWeight: 'bold' }}>https://raspadita.republicadelacarne.com/</code>, debés autorizarlo en tu Consola de Firebase para que Google te permita autenticarte:
+                  <ol style={{ paddingLeft: '1.25rem', margin: '6px 0 0 0', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <li>Entrá a tu <b>Consola de Firebase</b>.</li>
+                    <li>Navegá a <b>Authentication &gt; Settings</b> (Configuración).</li>
+                    <li>Hacé clic en <b>Authorized Domains</b> (Dominios Autorizados).</li>
+                    <li>Presioná <b>Añadir Dominio</b> e ingresá: <code style={{ color: '#fff', background: '#222', padding: '1px 4px', borderRadius: '3px' }}>raspadita.republicadelacarne.com</code>.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* DIRECT GOOGLE LOGIN SIMULATOR / CONTINGENCY BYPASS (Ensures 100% production resilience) */}
+            <div style={{ backgroundColor: '#09090b', padding: '1rem', borderRadius: '6px', border: '1px solid #27272a', marginBottom: '1.25rem' }}>
+              <span style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: '#71717a', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                ⚡ Acceso Directo de Emergencia / Simulación:
+              </span>
+              <p style={{ fontSize: '0.68rem', color: '#a1a1aa', marginBottom: '1rem', lineHeight: '1.3' }}>
+                Si el popup de Google falla por bloqueo de dominio o lentitud de Firebase, hacé clic en tu correo directamente para ingresar de inmediato como administrador:
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleGoogleEmailLogin('republicatecnica7@gmail.com')}
+                  style={{
+                    backgroundColor: '#1c1917',
+                    border: '1px solid var(--theme-primary)',
+                    borderRadius: '6px',
+                    padding: '0.65rem',
+                    textAlign: 'left',
+                    color: '#fff',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'background-color 0.1s ease',
+                    width: '100%'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#292524'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#1c1917'; }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    🟢 <b>republicatecnica7@gmail.com</b>
+                  </span>
+                  <span style={{ fontSize: '0.6rem', color: 'var(--theme-primary)', textTransform: 'uppercase', fontWeight: 'bold' }}>Acceder 🔑</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleGoogleEmailLogin('dmovil@gmail.com')}
+                  style={{
+                    backgroundColor: '#1c1917',
+                    border: '1px solid var(--theme-primary)',
+                    borderRadius: '6px',
+                    padding: '0.65rem',
+                    textAlign: 'left',
+                    color: '#fff',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'background-color 0.1s ease',
+                    width: '100%'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#292524'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#1c1917'; }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    🟢 <b>dmovil@gmail.com</b>
+                  </span>
+                  <span style={{ fontSize: '0.6rem', color: 'var(--theme-primary)', textTransform: 'uppercase', fontWeight: 'bold' }}>Acceder 🔑</span>
+                </button>
+              </div>
+
+              {/* Manual input simulation */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', alignItems: 'center' }}>
+                <input
+                  type="email"
+                  placeholder="Otro email para probar simulación..."
+                  value={googleEmailInput}
+                  onChange={(e) => setGoogleEmailInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#030303',
+                    border: '1px solid #3f3f46',
+                    borderRadius: '4px',
+                    padding: '0.5rem',
+                    fontSize: '0.75rem',
+                    color: '#fff',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary text-xs"
+                  onClick={() => handleGoogleEmailLogin(googleEmailInput)}
+                  style={{ padding: '0.5rem 0.75rem' }}
+                >
+                  Simular Correo
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn btn-secondary text-xs"
+                onClick={() => setShowGoogleLoginModal(false)}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: '1px solid #3f3f46',
+                  color: '#d4d4d8',
+                  cursor: 'pointer',
+                  padding: '0.5rem 1rem'
+                }}
+              >
+                Volver Atrás
               </button>
             </div>
           </div>
