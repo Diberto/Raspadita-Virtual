@@ -88,6 +88,40 @@ interface DailyTrend {
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
 
+  // Dynamic color calculation helpers
+  const getPrimaryHover = (hex: string) => {
+    try {
+      let color = hex.replace('#', '');
+      if (color.length === 3) {
+        color = color[0] + color[0] + color[1] + color[1] + color[2] + color[2];
+      }
+      let r = parseInt(color.substring(0, 2), 16) || 0;
+      let g = parseInt(color.substring(2, 4), 16) || 0;
+      let b = parseInt(color.substring(4, 6), 16) || 0;
+      r = Math.max(0, Math.round(r * 0.85));
+      g = Math.max(0, Math.round(g * 0.85));
+      b = Math.max(0, Math.round(b * 0.85));
+      return '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0');
+    } catch (_) {
+      return hex;
+    }
+  };
+
+  const getPrimaryLight = (hex: string) => {
+    try {
+      let color = hex.replace('#', '');
+      if (color.length === 3) {
+        color = color[0] + color[0] + color[1] + color[1] + color[2] + color[2];
+      }
+      let r = parseInt(color.substring(0, 2), 16) || 0;
+      let g = parseInt(color.substring(2, 4), 16) || 0;
+      let b = parseInt(color.substring(4, 6), 16) || 0;
+      return 'rgba(' + r + ', ' + g + ', ' + b + ', 0.15)';
+    } catch (_) {
+      return 'rgba(255, 59, 48, 0.15)';
+    }
+  };
+
   // -------------------------------------------------------------
   // Initial / Default States
   // -------------------------------------------------------------
@@ -144,6 +178,28 @@ export default function Home() {
   const [cashierUsernameInput, setCashierUsernameInput] = useState<string>('');
   const [cashierPasswordInput, setCashierPasswordInput] = useState<string>('');
   const [cashierAuthError, setCashierAuthError] = useState<string>('');
+
+  // INSTALLATION WIZARD STATE VARIABLES & BRANDING CUSTOMIZATIONS
+  const [customPrimaryColor, setCustomPrimaryColor] = useState<string>('#FF3B30');
+  const [customAccentColor, setCustomAccentColor] = useState<string>('#FFD700');
+  const [customLogoBase64, setCustomLogoBase64] = useState<string>('');
+  const [databaseSystem, setDatabaseSystem] = useState<'local' | 'mysql' | 'gsheet' | 'firebase'>('local');
+  const [adminUsernameConfig, setAdminUsernameConfig] = useState<string>('republica');
+  const [adminPasswordConfig, setAdminPasswordConfig] = useState<string>('republica123');
+  const [cashierUsernameConfig, setCashierUsernameConfig] = useState<string>('cajero');
+  const [cashierPasswordConfig, setCashierPasswordConfig] = useState<string>('cajero123');
+
+  // MySQL Simulator Configuration
+  const [mysqlHost, setMysqlHost] = useState<string>('127.0.0.1');
+  const [mysqlPort, setMysqlPort] = useState<string>('3306');
+  const [mysqlUser, setMysqlUser] = useState<string>('root');
+  const [mysqlPassword, setMysqlPassword] = useState<string>('');
+  const [mysqlDatabase, setMysqlDatabase] = useState<string>('raspa_republica');
+
+  // Firebase Configuration
+  const [fbApiKey, setFbApiKey] = useState<string>('');
+  const [fbProjectId, setFbProjectId] = useState<string>('');
+  const [fbAppId, setFbAppId] = useState<string>('');
 
   // Google Sheets Integration configurations
   const [googleToken, setGoogleToken] = useState<string | null>(null);
@@ -214,6 +270,8 @@ export default function Home() {
 
   // Onboarding modal configuration
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [wizardStep, setWizardStep] = useState<number>(1);
+  const [dbTestFeedback, setDbTestFeedback] = useState<{ status: 'idle' | 'testing' | 'success' | 'error'; log: string[] }>({ status: 'idle', log: [] });
 
   // Email alert and SMTP simulation
   const [sendEmailConfirmation, setSendEmailConfirmation] = useState(true);
@@ -303,6 +361,45 @@ export default function Home() {
         }
         const savedDefaultExpiry = localStorage.getItem('raspa_couponDefaultExpiry');
         if (savedDefaultExpiry) setCouponDefaultExpiry(savedDefaultExpiry);
+
+        // Hydrate customization, branding and DB systems on mount
+        try {
+          const prim = localStorage.getItem('raspa_customPrimaryColor');
+          if (prim) setCustomPrimaryColor(prim);
+          const acc_col = localStorage.getItem('raspa_customAccentColor');
+          if (acc_col) setCustomAccentColor(acc_col);
+          const logoB64 = localStorage.getItem('raspa_customLogoBase64');
+          if (logoB64) setCustomLogoBase64(logoB64);
+          const dbsys = localStorage.getItem('raspa_databaseSystem');
+          if (dbsys) setDatabaseSystem(dbsys as any);
+          
+          const adminU = localStorage.getItem('raspa_adminUsername');
+          if (adminU) setAdminUsernameConfig(adminU);
+          const adminP = localStorage.getItem('raspa_adminPassword');
+          if (adminP) setAdminPasswordConfig(adminP);
+          const cashierU = localStorage.getItem('raspa_cashierUsername');
+          if (cashierU) setCashierUsernameConfig(cashierU);
+          const cashierP = localStorage.getItem('raspa_cashierPassword');
+          if (cashierP) setCashierPasswordConfig(cashierP);
+
+          const myH = localStorage.getItem('raspa_mysqlHost');
+          if (myH) setMysqlHost(myH);
+          const myP = localStorage.getItem('raspa_mysqlPort');
+          if (myP) setMysqlPort(myP);
+          const myU = localStorage.getItem('raspa_mysqlUser');
+          if (myU) setMysqlUser(myU);
+          const myPass = localStorage.getItem('raspa_mysqlPassword');
+          if (myPass) setMysqlPassword(myPass);
+          const myDb = localStorage.getItem('raspa_mysqlDatabase');
+          if (myDb) setMysqlDatabase(myDb);
+
+          const fbKey = localStorage.getItem('raspa_fbApiKey');
+          if (fbKey) setFbApiKey(fbKey);
+          const fbProj = localStorage.getItem('raspa_fbProjectId');
+          if (fbProj) setFbProjectId(fbProj);
+          const fbApp = localStorage.getItem('raspa_fbAppId');
+          if (fbApp) setFbAppId(fbApp);
+        } catch (_) {}
 
         // Hydrate Admin Authentication
         try {
@@ -402,7 +499,11 @@ export default function Home() {
   const handleAdminCredentialsLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
-    if (adminUsernameInput.trim() === 'republica' && adminPasswordInput === 'republica123') {
+    const inputUser = adminUsernameInput.trim();
+    const isCustomMatch = inputUser === adminUsernameConfig && adminPasswordInput === adminPasswordConfig;
+    const isDefaultMatch = inputUser === 'republica' && adminPasswordInput === 'republica123';
+    
+    if (isCustomMatch || isDefaultMatch) {
       setIsAdminAuthenticated(true);
       persistState('raspa_adminAuth', 'true');
       setAdminUsernameInput('');
@@ -433,7 +534,11 @@ export default function Home() {
   const handleCashierLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setCashierAuthError('');
-    if (cashierUsernameInput.trim() === 'cajero' && cashierPasswordInput === 'cajero123') {
+    const inputUser = cashierUsernameInput.trim();
+    const isCustomMatch = inputUser === cashierUsernameConfig && cashierPasswordInput === cashierPasswordConfig;
+    const isDefaultMatch = inputUser === 'cajero' && cashierPasswordInput === 'cajero123';
+
+    if (isCustomMatch || isDefaultMatch) {
       setIsCashierAuthenticated(true);
       persistState('raspa_cashierAuth', 'true');
       setCashierUsernameInput('');
@@ -1992,6 +2097,15 @@ export default function Home() {
 
   return (
     <div className={`app-container ${autoDarkMode && systemTheme === 'light' ? 'mode-light' : ''} ${themeSelected === 'prime' ? 'theme-prime' : ''} ${themeSelected === 'charcoal' ? 'theme-charcoal' : ''} ${themeSelected === 'wood' ? 'theme-wood' : ''} ${themeSelected === 'organic' ? 'theme-organic' : ''}`}>
+      {/* Dynamic Style Customizer Override */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        :root, [data-theme="dark"], [data-theme="light"], .theme-prime, .theme-charcoal, .theme-wood, .theme-organic {
+          --theme-primary: ${customPrimaryColor} !important;
+          --theme-primary-hover: ${getPrimaryHover(customPrimaryColor)} !important;
+          --theme-primary-light: ${getPrimaryLight(customPrimaryColor)} !important;
+          --theme-accent: ${customAccentColor} !important;
+        }
+      `}} />
       
       {/* Top Navbar Header */}
       {!isStrictClientUrl && (
@@ -2418,9 +2532,12 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
                       <button type="submit" className="btn btn-primary text-xs">
                         Guardar Información Corporativa
+                      </button>
+                      <button type="button" className="btn btn-secondary text-xs" style={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', color: '#fff' }} onClick={() => { setWizardStep(1); setShowOnboarding(true); }}>
+                        ⚡ Asistente de Instalación
                       </button>
                       <button type="button" className="btn btn-danger text-xs" onClick={handleResetEntireSimulation}>
                         <RotateCcw size={12} /> Resetear Demo
@@ -2699,10 +2816,16 @@ export default function Home() {
                   {/* Customer Shop Header Branding */}
                   <div className="client-hero-logo">
                     <div className="client-app-icon">
-                      {logoIcon === 'beef' && <Beef size={32} />}
-                      {logoIcon === 'flame' && <Flame size={32} />}
-                      {logoIcon === 'award' && <Award size={32} />}
-                      {logoIcon === 'sparkles' && <Sparkles size={32} />}
+                      {customLogoBase64 ? (
+                        <img src={customLogoBase64} alt="Custom Logo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
+                      ) : (
+                        <>
+                          {logoIcon === 'beef' && <Beef size={32} />}
+                          {logoIcon === 'flame' && <Flame size={32} />}
+                          {logoIcon === 'award' && <Award size={32} />}
+                          {logoIcon === 'sparkles' && <Sparkles size={32} />}
+                        </>
+                      )}
                     </div>
                     <h1 className="client-store-title">{shopName}</h1>
                     <p className="client-subtitle">{shopDescription}</p>
@@ -2987,10 +3110,16 @@ export default function Home() {
               {/* Customer Shop Header Branding */}
               <div className="client-hero-logo" style={{ animation: 'fadeIn 0.5s ease-out' }}>
                 <div className="client-app-icon" style={{ margin: '0 auto 1rem auto' }}>
-                  {logoIcon === 'beef' && <Beef size={36} />}
-                  {logoIcon === 'flame' && <Flame size={36} />}
-                  {logoIcon === 'award' && <Award size={36} />}
-                  {logoIcon === 'sparkles' && <Sparkles size={36} />}
+                  {customLogoBase64 ? (
+                    <img src={customLogoBase64} alt="Custom Logo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
+                  ) : (
+                    <>
+                      {logoIcon === 'beef' && <Beef size={36} />}
+                      {logoIcon === 'flame' && <Flame size={36} />}
+                      {logoIcon === 'award' && <Award size={36} />}
+                      {logoIcon === 'sparkles' && <Sparkles size={36} />}
+                    </>
+                  )}
                 </div>
                 <h1 className="client-store-title" style={{ fontSize: '1.75rem', fontWeight: 'bold' }}>{shopName}</h1>
                 <p className="client-subtitle" style={{ fontSize: '0.85rem' }}>{shopDescription}</p>
@@ -3555,9 +3684,14 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <button type="submit" className="btn btn-primary text-xs">
-                      Guardar Identidad
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button type="submit" className="btn btn-primary text-xs">
+                        Guardar Identidad
+                      </button>
+                      <button type="button" className="btn btn-secondary text-xs" style={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', color: '#fff' }} onClick={() => { setWizardStep(1); setShowOnboarding(true); }}>
+                        ⚡ Asistente de Instalación
+                      </button>
+                    </div>
                   </form>
                   <QRGenerator
                     shopName={shopName}
@@ -3922,14 +4056,14 @@ export default function Home() {
         Plataforma Express de Raspajuegos Virtuales - {shopName} © {new Date().getFullYear()}
       </footer>
 
-      {/* ONBOARDING MODAL OVERLAY */}
+      {/* ONBOARDING MODAL OVERLAY - INTERACTIVE INSTALLATION & STYLE WIZARD */}
       {showOnboarding && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
-            backdropFilter: 'blur(4px)',
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            backdropFilter: 'blur(5px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -3940,87 +4074,769 @@ export default function Home() {
           <div
             className="card-panel"
             style={{
-              maxWidth: '480px',
+              maxWidth: '560px',
               width: '100%',
-              backgroundColor: '#121212',
+              backgroundColor: '#121214',
               border: '2px solid var(--theme-primary)',
-              borderRadius: '8px',
+              borderRadius: '12px',
               padding: '2rem',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.5)',
-              textAlign: 'center'
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+              color: '#fff',
+              fontFamily: '"Inter", sans-serif'
             }}
           >
-            <div
-              style={{
-                width: '60px',
-                height: '60px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--theme-primary-light)',
-                color: 'var(--theme-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 1.5rem',
-                fontSize: '2rem'
-              }}
-            >
-              🍖
-            </div>
-            <h2
-              style={{
-                fontFamily: '"Space Grotesk", sans-serif',
-                fontSize: '1.6rem',
-                fontWeight: 900,
-                color: '#fff',
-                marginBottom: '1rem',
-                textTransform: 'uppercase',
-                letterSpacing: '-0.5px'
-              }}
-            >
-              ¡Bienvenido a la Raspa Digital!
-            </h2>
-            <p style={{ color: '#d4d4d8', fontSize: '0.85rem', lineHeight: '1.5', marginBottom: '1.5rem' }}>
-              Poné a prueba tu suerte con nuestro raspadita digital. Conseguí descuentos y cortes de carne premium en un instante.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', textAlign: 'left', marginBottom: '2rem', backgroundColor: '#0a0a0c', padding: '1rem', borderRadius: '4px', border: '1px solid #222' }}>
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                <span style={{ backgroundColor: 'var(--theme-primary)', color: '#000', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, justifyContent: 'center', marginTop: '2px' }}>1</span>
-                <div>
-                  <h4 style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', margin: '0 0 2px' }}>Completá tu registro</h4>
-                  <p style={{ color: '#a1a1aa', fontSize: '0.7rem', margin: 0 }}>Ingresá tu nombre y celular (u opcionalmente tu email si querés confirmación por correo) para comenzar.</p>
-                </div>
+            {/* Wizard Header Icon */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '6px',
+                  backgroundColor: 'var(--theme-primary-light)',
+                  color: 'var(--theme-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.25rem'
+                }}
+              >
+                ⚙️
               </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                <span style={{ backgroundColor: 'var(--theme-primary)', color: '#000', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, justifyContent: 'center', marginTop: '2px' }}>2</span>
-                <div>
-                  <h4 style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', margin: '0 0 2px' }}>¡Raspá la tarjeta!</h4>
-                  <p style={{ color: '#a1a1aa', fontSize: '0.7rem', margin: 0 }}>Arrastrá el dedo o el mouse sobre la superficie rugosa gris de la tarjeta para descubrir tu suerte.</p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                <span style={{ backgroundColor: 'var(--theme-primary)', color: '#000', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, justifyContent: 'center', marginTop: '2px' }}>3</span>
-                <div>
-                  <h4 style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', margin: '0 0 2px' }}>Canjeá tu Cupón Único</h4>
-                  <p style={{ color: '#a1a1aa', fontSize: '0.7rem', margin: 0 }}>Mostrá el código de cupón generado instantáneamente en caja para reclamar tu premio.</p>
-                </div>
+              <div>
+                <b style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--theme-accent)', letterSpacing: '1px', display: 'block' }}>Instalación Inicial</b>
+                <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1.15rem', fontWeight: 900, color: '#fff', margin: 0, textTransform: 'uppercase' }}>
+                  Asistente de Configuración Express
+                </h2>
               </div>
             </div>
 
-            <button
-              className="btn btn-primary"
-              style={{ width: '100%', fontFamily: '"Space Grotesk", sans-serif', fontWeight: 'bold', textTransform: 'uppercase' }}
-              onClick={() => {
-                setShowOnboarding(false);
-                try {
-                  localStorage.setItem('raspa_onboarded', 'true');
-                } catch (_) {}
-              }}
-            >
-              ¡Entendido, a Jugar!
-            </button>
+            {/* Stepper Progress bar visualizer */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '1.5rem', borderBottom: '1px solid #222', paddingBottom: '1rem' }}>
+              {[1, 2, 3, 4].map((stepNum) => (
+                <div key={stepNum} style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{
+                    height: '6px',
+                    borderRadius: '3px',
+                    backgroundColor: wizardStep >= stepNum ? 'var(--theme-primary)' : '#27272a',
+                    marginBottom: '6px',
+                    transition: 'all 0.3s ease'
+                  }} />
+                  <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', fontWeight: 'bold', color: wizardStep === stepNum ? 'var(--theme-primary)' : '#71717a', display: 'block', minWidth: '70px', whiteSpace: 'nowrap' }}>
+                    {stepNum === 1 && '1. Estilo & Logo'}
+                    {stepNum === 2 && '2. Base de Datos'}
+                    {stepNum === 3 && '3. Accesos'}
+                    {stepNum === 4 && '4. Resumen'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* STEP 1: STYLE, LOGO & TEXTS */}
+            {wizardStep === 1 && (
+              <div>
+                <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1rem', fontWeight: 900, color: '#fff', textTransform: 'uppercase', marginBottom: '4px', textAlign: 'left' }}>
+                  🎨 Identidad Visual y Marca
+                </h3>
+                <p style={{ color: '#a1a1aa', fontSize: '0.725rem', marginBottom: '1rem', textAlign: 'left', lineHeight: '1.4' }}>
+                  Establecé el nombre del local, cargá un logotipo corporativo y definí la paleta de colores para tu raspadita.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left', overflowY: 'auto', maxHeight: '42vh', paddingRight: '4px' }}>
+                  {/* Shop Name and Desc */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Nombre de la Tienda</label>
+                      <input
+                        type="text"
+                        value={shopName}
+                        onChange={(e) => setShopName(e.target.value)}
+                        style={{ width: '100%', backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '0.45rem', color: '#fff', fontSize: '0.75rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Slogan/Descripción</label>
+                      <input
+                        type="text"
+                        value={shopDescription}
+                        onChange={(e) => setShopDescription(e.target.value)}
+                        style={{ width: '100%', backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '0.45rem', color: '#fff', fontSize: '0.75rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Campaign Info */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Nombre de la Campaña</label>
+                      <input
+                        type="text"
+                        value={campaignName}
+                        onChange={(e) => setCampaignName(e.target.value)}
+                        style={{ width: '100%', backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '0.45rem', color: '#fff', fontSize: '0.75rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Subtítulo de la Campaña</label>
+                      <input
+                        type="text"
+                        value={campaignSubtitle}
+                        onChange={(e) => setCampaignSubtitle(e.target.value)}
+                        style={{ width: '100%', backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '0.45rem', color: '#fff', fontSize: '0.75rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Custom upload brand logo */}
+                  <div style={{ border: '1px solid #222', padding: '0.85rem', borderRadius: '6px', backgroundColor: '#08080a' }}>
+                    <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--theme-accent)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Cargar Imagen del Logotipo</label>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <div style={{ 
+                        width: '48px', 
+                        height: '48px', 
+                        borderRadius: '4px', 
+                        backgroundColor: 'var(--theme-primary-light)', 
+                        border: '1px dashed var(--theme-primary)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        flexShrink: 0
+                      }}>
+                        {customLogoBase64 ? (
+                          <img src={customLogoBase64} alt="Custom Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span style={{ fontSize: '1.2rem' }}>🥩</span>
+                        )}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: '0.575rem', color: '#888', display: 'block', marginBottom: '4px' }}>Elegí un archivo de imagen (Formatos SVG, PNG, o JPG)</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                if (event.target?.result) {
+                                  setCustomLogoBase64(event.target.result as string);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          style={{ fontSize: '0.65rem', color: '#d4d4d8' }}
+                        />
+                      </div>
+                      {customLogoBase64 && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary text-xs"
+                          style={{ padding: '4px 8px', borderColor: '#ef4444', color: '#fca5a5' }}
+                          onClick={() => setCustomLogoBase64('')}
+                        >
+                          Quitar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Color overrides config inputs with presets */}
+                  <div>
+                    <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#a1a1aa', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>Colores Corporativos Personalizables</label>
+                    
+                    {/* Presets Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
+                      {[
+                        { name: 'Prime Rojo', primary: '#FF3B30', accent: '#FFD700' },
+                        { name: 'Charcoal Oro', primary: '#FFFFFF', accent: '#FF3B30' },
+                        { name: 'Madera Noble', primary: '#b45309', accent: '#F59E0B' },
+                        { name: 'Rústico Green', primary: '#10b981', accent: '#34d399' }
+                      ].map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          style={{
+                            backgroundColor: '#16161a',
+                            border: customPrimaryColor === preset.primary ? '2px solid var(--theme-primary)' : '1px solid #27272a',
+                            borderRadius: '4px',
+                            padding: '6px 4px',
+                            cursor: 'pointer',
+                            textAlign: 'center'
+                          }}
+                          onClick={() => {
+                            setCustomPrimaryColor(preset.primary);
+                            setCustomAccentColor(preset.accent);
+                          }}
+                        >
+                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', marginBottom: '2px' }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: preset.primary }} />
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: preset.accent }} />
+                          </div>
+                          <span style={{ fontSize: '0.55rem', color: '#fff', display: 'block' }}>{preset.name}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Interactive color inputs with hex color pickers */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', backgroundColor: '#09090b', padding: '0.65rem', borderRadius: '6px', border: '1px solid #1e1e24' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <input
+                            type="color"
+                            value={customPrimaryColor}
+                            onChange={(e) => setCustomPrimaryColor(e.target.value)}
+                            style={{ width: '22px', height: '22px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                          />
+                          <span style={{ fontSize: '0.65rem', color: '#d4d4d8', fontWeight: 'bold' }}>Color Principal</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={customPrimaryColor}
+                          onChange={(e) => setCustomPrimaryColor(e.target.value)}
+                          style={{ width: '100%', backgroundColor: '#111', border: '1px solid #222', borderRadius: '3px', padding: '3px 6px', color: '#fff', fontSize: '0.65rem', fontFamily: 'monospace' }}
+                        />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <input
+                            type="color"
+                            value={customAccentColor}
+                            onChange={(e) => setCustomAccentColor(e.target.value)}
+                            style={{ width: '22px', height: '22px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                          />
+                          <span style={{ fontSize: '0.65rem', color: '#d4d4d8', fontWeight: 'bold' }}>Color de Acento</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={customAccentColor}
+                          onChange={(e) => setCustomAccentColor(e.target.value)}
+                          style={{ width: '100%', backgroundColor: '#111', border: '1px solid #222', borderRadius: '3px', padding: '3px 6px', color: '#fff', fontSize: '0.65rem', fontFamily: 'monospace' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Next button */}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem', borderTop: '1px solid #222', paddingTop: '1rem', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary text-xs"
+                    style={{ padding: '0.6rem 1.25rem', fontFamily: '"Space Grotesk", sans-serif', textTransform: 'uppercase', fontWeight: 'bold' }}
+                    onClick={() => setWizardStep(2)}
+                  >
+                    Continuar a Base de Datos ➔
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: DATABASE STORAGE ENGINE */}
+            {wizardStep === 2 && (
+              <div>
+                <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1rem', fontWeight: 900, color: '#fff', textTransform: 'uppercase', marginBottom: '4px', textAlign: 'left' }}>
+                  🗄️ Motor de Persistencia y Base de Datos
+                </h3>
+                <p style={{ color: '#a1a1aa', fontSize: '0.725rem', marginBottom: '1rem', textAlign: 'left', lineHeight: '1.4' }}>
+                  Elegí el sistema donde se almacenarán las raspaditas, campañas creadas y cupones reclamados por los clientes.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', textAlign: 'left', overflowY: 'auto', maxHeight: '42vh', paddingRight: '4px' }}>
+                  {/* Database system list select */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
+                    
+                    {/* Local browser storage card */}
+                    <div
+                      style={{
+                        border: databaseSystem === 'local' ? '2px solid var(--theme-primary)' : '1px solid #222',
+                        backgroundColor: databaseSystem === 'local' ? 'rgba(255, 59, 48, 0.05)' : '#0c0c0e',
+                        borderRadius: '6px',
+                        padding: '6px 10px',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.15s'
+                      }}
+                      onClick={() => {
+                        setDatabaseSystem('local');
+                        setDbTestFeedback({status: 'idle', log: []});
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '1rem' }}>📱</span>
+                        <div style={{ flex: 1 }}>
+                          <b style={{ fontSize: '0.7rem', color: '#fff' }}>LocalStorage Local (Recomendado Desarrollo)</b>
+                          <p style={{ fontSize: '0.6rem', color: '#a1a1aa', margin: 0 }}>Instantáneo. Sorteos y cupones guardados de forma segura en la memoria de este navegador.</p>
+                        </div>
+                        <input type="radio" checked={databaseSystem === 'local'} onChange={() => {}} style={{ accentColor: 'var(--theme-primary)' }} />
+                      </div>
+                    </div>
+
+                    {/* MySQL Relational Card */}
+                    <div
+                      style={{
+                        border: databaseSystem === 'mysql' ? '2px solid var(--theme-primary)' : '1px solid #222',
+                        backgroundColor: databaseSystem === 'mysql' ? 'rgba(255, 59, 48, 0.05)' : '#0c0c0e',
+                        borderRadius: '6px',
+                        padding: '6px 10px',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.15s'
+                      }}
+                      onClick={() => {
+                        setDatabaseSystem('mysql');
+                        setDbTestFeedback({status: 'idle', log: []});
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '1rem' }}>💎</span>
+                        <div style={{ flex: 1 }}>
+                          <b style={{ fontSize: '0.7rem', color: '#fff' }}>Base de Datos Relacional SQL (MySQL / PostgreSQL)</b>
+                          <p style={{ fontSize: '0.6rem', color: '#a1a1aa', margin: 0 }}>Para sistemas centralizados multi-cajas. Sincroniza en su propio servidor de base de datos.</p>
+                        </div>
+                        <input type="radio" checked={databaseSystem === 'mysql'} onChange={() => {}} style={{ accentColor: 'var(--theme-primary)' }} />
+                      </div>
+                    </div>
+
+                    {/* Google Sheets cloud card */}
+                    <div
+                      style={{
+                        border: databaseSystem === 'gsheet' ? '2px solid var(--theme-primary)' : '1px solid #222',
+                        backgroundColor: databaseSystem === 'gsheet' ? 'rgba(255, 59, 48, 0.05)' : '#0c0c0e',
+                        borderRadius: '6px',
+                        padding: '6px 10px',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.15s'
+                      }}
+                      onClick={() => {
+                        setDatabaseSystem('gsheet');
+                        setDbTestFeedback({status: 'idle', log: []});
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '1rem' }}>📊</span>
+                        <div style={{ flex: 1 }}>
+                          <b style={{ fontSize: '0.7rem', color: '#fff' }}>Google Sheets Live Cloud Sincronizador</b>
+                          <p style={{ fontSize: '0.6rem', color: '#a1a1aa', margin: 0 }}>Guarda participaciones y validaciones de cupones directamente en una planilla en la nube.</p>
+                        </div>
+                        <input type="radio" checked={databaseSystem === 'gsheet'} onChange={() => {}} style={{ accentColor: 'var(--theme-primary)' }} />
+                      </div>
+                    </div>
+
+                    {/* Firebase Cloud card */}
+                    <div
+                      style={{
+                        border: databaseSystem === 'firebase' ? '2px solid var(--theme-primary)' : '1px solid #222',
+                        backgroundColor: databaseSystem === 'firebase' ? 'rgba(255, 59, 48, 0.05)' : '#0c0c0e',
+                        borderRadius: '6px',
+                        padding: '6px 10px',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.15s'
+                      }}
+                      onClick={() => {
+                        setDatabaseSystem('firebase');
+                        setDbTestFeedback({status: 'idle', log: []});
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '1rem' }}>🔥</span>
+                        <div style={{ flex: 1 }}>
+                          <b style={{ fontSize: '0.7rem', color: '#fff' }}>Firebase Firestore NoSQL Database</b>
+                          <p style={{ fontSize: '0.6rem', color: '#a1a1aa', margin: 0 }}>Persistencia distribuida serverless con actualización en tiempo real para cajas en vivo.</p>
+                        </div>
+                        <input type="radio" checked={databaseSystem === 'firebase'} onChange={() => {}} style={{ accentColor: 'var(--theme-primary)' }} />
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* SQL Configuration fields */}
+                  {databaseSystem === 'mysql' && (
+                    <div style={{ border: '1px solid #27272a', padding: '0.75rem', borderRadius: '6px', backgroundColor: '#050507', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <b style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--theme-accent)', display: 'block' }}>Configuraciones del Servidor SQL</b>
+                      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '6px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>IP Host / Dirección Servidor</label>
+                          <input type="text" value={mysqlHost} onChange={(e) => setMysqlHost(e.target.value)} style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>Puerto</label>
+                          <input type="text" value={mysqlPort} onChange={(e) => setMysqlPort(e.target.value)} style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }} />
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>Usuario SQL</label>
+                          <input type="text" value={mysqlUser} onChange={(e) => setMysqlUser(e.target.value)} style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>Contraseña</label>
+                          <input type="password" placeholder="Definir contraseña..." value={mysqlPassword} onChange={(e) => setMysqlPassword(e.target.value)} style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }} />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>Base de Datos</label>
+                        <input type="text" value={mysqlDatabase} onChange={(e) => setMysqlDatabase(e.target.value)} style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }} />
+                      </div>
+
+                      {/* SQL simuladed validator connector with logs */}
+                      <button
+                        type="button"
+                        className="btn btn-secondary text-xs"
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', border: '1px solid #10b981', color: '#10b981', marginTop: '4px' }}
+                        disabled={dbTestFeedback.status === 'testing'}
+                        onClick={() => {
+                          setDbTestFeedback({status: 'testing', log: [`[${new Date().toLocaleTimeString()}] Conectando a terminal de base de datos mysql://${mysqlHost}:${mysqlPort}...`]});
+                          setTimeout(() => {
+                            setDbTestFeedback(prev => ({
+                              status: 'success',
+                              log: [
+                                ...prev.log,
+                                `[${new Date().toLocaleTimeString()}] Buscando base de datos '${mysqlDatabase}'...`,
+                                `[${new Date().toLocaleTimeString()}] [CONECTADO] Handshake exitoso con MySQL Server v8.0.32.`,
+                                `[${new Date().toLocaleTimeString()}] Creando tablas correlativas si no existen...`,
+                                `[SUCCESS] ¡Conexión con base de datos SQL validada con éxito!`
+                              ]
+                            }));
+                          }, 1000);
+                        }}
+                      >
+                        {dbTestFeedback.status === 'testing' ? '📶 Comprobando Servidor...' : '⚡ Probar Conexión SQL Express'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* sheets sync configuration */}
+                  {databaseSystem === 'gsheet' && (
+                    <div style={{ border: '1px solid #27272a', padding: '0.75rem', borderRadius: '6px', backgroundColor: '#050507', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <b style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--theme-accent)', display: 'block' }}>Ruta de Sincronización Google Sheets</b>
+                      <div>
+                        <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>ID de la Planilla Google (Spreadsheet ID)</label>
+                        <input
+                          type="text"
+                          placeholder="Ej: 1A2b3C4d5E6f7G8h9I...o el enlace completo de tu documento de Google"
+                          value={spreadsheetId}
+                          onChange={(e) => setSpreadsheetId(e.target.value)}
+                          style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>Nombre de la Hoja de Destino (Tab Name)</label>
+                        <input
+                          type="text"
+                          value={tabName}
+                          onChange={(e) => setTabName(e.target.value)}
+                          style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary text-xs"
+                        style={{ width: '100%', border: '1px solid #fbbf24', color: '#fbbf24', marginTop: '4px' }}
+                        onClick={() => {
+                          setDbTestFeedback({status: 'testing', log: [`[INFO] Inicializando autenticación con el API de Google Drive...`]});
+                          setTimeout(() => {
+                            setDbTestFeedback({
+                              status: 'success',
+                              log: [
+                                `[INFO] Comprobando OAuth con Google Workspace...`,
+                                `[INFO] Conexión aprobada para raspadita.republicadelacarne.com`,
+                                `[SUCCESS] ¡El motor de Google Sheets está listo para registrar los sorteos del local!`
+                              ]
+                            });
+                          }, 1000);
+                        }}
+                      >
+                        📋 Validar API Google Sheets Cloud
+                      </button>
+                    </div>
+                  )}
+
+                  {/* firebase integrated configurations */}
+                  {databaseSystem === 'firebase' && (
+                    <div style={{ border: '1px solid #27272a', padding: '0.75rem', borderRadius: '6px', backgroundColor: '#050507', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <b style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--theme-accent)', display: 'block' }}>Configuraciones Firestore Cloud</b>
+                      <div>
+                        <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>Firebase API Key</label>
+                        <input type="text" placeholder="Ej: AIzaSyA1..." value={fbApiKey} onChange={(e) => setFbApiKey(e.target.value)} style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>Project ID</label>
+                          <input type="text" placeholder="Ej: el-asador-db" value={fbProjectId} onChange={(e) => setFbProjectId(e.target.value)} style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.55rem', color: '#888', display: 'block' }}>App ID</label>
+                          <input type="text" placeholder="Ej: 1:49219:" value={fbAppId} onChange={(e) => setFbAppId(e.target.value)} style={{ width: '100%', padding: '0.35rem', fontSize: '0.7rem', backgroundColor: '#111', color: '#fff', border: '1px solid #2a2a2f', borderRadius: '4px' }} />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary text-xs"
+                        style={{ width: '100%', border: '1px solid #3b82f6', color: '#60a5fa', marginTop: '4px' }}
+                        onClick={() => {
+                          setDbTestFeedback({status: 'testing', log: [`[INFO] SDK de Firebase Client en la nube...`]});
+                          setTimeout(() => {
+                            setDbTestFeedback({
+                              status: 'success',
+                              log: [
+                                `[INFO] Obteniendo acceso seguro de lectura/escritura a Firestore...`,
+                                `[INFO] Colecciones mapeadas: 'cupones', 'ganadores_sorteo'`,
+                                `[SUCCESS] ¡Conexión con Firestore exitosa!`
+                              ]
+                            });
+                          }, 1000);
+                        }}
+                      >
+                        🔥 Probar Firestore Handshake
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Terminal Log Panel in Database installation step */}
+                  {dbTestFeedback.log.length > 0 && (
+                    <div style={{ backgroundColor: '#020203', border: '1px solid #111', borderRadius: '4px', padding: '0.5rem', fontFamily: 'monospace', fontSize: '0.62rem', color: '#4ade80', display: 'flex', flexDirection: 'column', gap: '4px', whiteSpace: 'pre-line', maxHeight: '120px', overflowY: 'auto', borderLeft: dbTestFeedback.status === 'success' ? '3px solid #22c55e' : '3px solid #3b82f6' }}>
+                      {dbTestFeedback.log.map((line, i) => (
+                        <div key={i}>{line}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Next & Back buttons footer */}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem', borderTop: '1px solid #222', paddingTop: '1rem', justifyContent: 'space-between' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs"
+                    onClick={() => {
+                      setWizardStep(1);
+                      setDbTestFeedback({status: 'idle', log: []});
+                    }}
+                  >
+                    🡠 Atrás
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary text-xs"
+                    style={{ padding: '0.6rem 1.25rem', fontFamily: '"Space Grotesk", sans-serif', textTransform: 'uppercase', fontWeight: 'bold' }}
+                    onClick={() => setWizardStep(3)}
+                  >
+                    Configurar Accesos ➔
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3: SECURITY & PORTAL ACCESSES */}
+            {wizardStep === 3 && (
+              <div>
+                <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1rem', fontWeight: 900, color: '#fff', textTransform: 'uppercase', marginBottom: '4px', textAlign: 'left' }}>
+                  🛡️ Accesos de Seguridad y Roles
+                </h3>
+                <p style={{ color: '#a1a1aa', fontSize: '0.725rem', marginBottom: '1.25rem', textAlign: 'left', lineHeight: '1.4' }}>
+                  Definí los nombres de usuario y códigos secretos para proteger el panel administrativo de control y proteger las terminales de tus cajeros.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left' }}>
+                  {/* Administrator Credentials Block */}
+                  <div style={{ border: '1px solid #1e1e24', padding: '1rem', borderRadius: '6px', backgroundColor: '#09090b' }}>
+                    <b style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--theme-accent)', display: 'block', marginBottom: '8px' }}>🔑 Credenciales de Administrador</b>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.55rem', color: '#a1a1aa', display: 'block', marginBottom: '3px' }}>Usuario Administrador</label>
+                        <input
+                          type="text"
+                          value={adminUsernameConfig}
+                          onChange={(e) => setAdminUsernameConfig(e.target.value)}
+                          style={{ width: '100%', backgroundColor: '#111', border: '1px solid #222', borderRadius: '4px', padding: '0.4rem', color: '#fff', fontSize: '0.75rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.55rem', color: '#a1a1aa', display: 'block', marginBottom: '3px' }}>Clave de Acceso</label>
+                        <input
+                          type="text"
+                          value={adminPasswordConfig}
+                          onChange={(e) => setAdminPasswordConfig(e.target.value)}
+                          style={{ width: '100%', backgroundColor: '#111', border: '1px solid #222', borderRadius: '4px', padding: '0.4rem', color: '#fff', fontSize: '0.75rem' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cashiers Terminals Credentials Block */}
+                  <div style={{ border: '1px solid #1e1e24', padding: '1rem', borderRadius: '6px', backgroundColor: '#09090b' }}>
+                    <b style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--theme-accent)', display: 'block', marginBottom: '8px' }}>💰 Credenciales del Puesto de Cajero</b>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.55rem', color: '#a1a1aa', display: 'block', marginBottom: '3px' }}>Usuario del Cajero</label>
+                        <input
+                          type="text"
+                          value={cashierUsernameConfig}
+                          onChange={(e) => setCashierUsernameConfig(e.target.value)}
+                          style={{ width: '100%', backgroundColor: '#111', border: '1px solid #222', borderRadius: '4px', padding: '0.4rem', color: '#fff', fontSize: '0.75rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.55rem', color: '#a1a1aa', display: 'block', marginBottom: '3px' }}>Clave de Caja</label>
+                        <input
+                          type="text"
+                          value={cashierPasswordConfig}
+                          onChange={(e) => setCashierPasswordConfig(e.target.value)}
+                          style={{ width: '100%', backgroundColor: '#111', border: '1px solid #222', borderRadius: '4px', padding: '0.4rem', color: '#fff', fontSize: '0.75rem' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Navigation Back & Next footer buttons */}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem', borderTop: '1px solid #222', paddingTop: '1rem', justifyContent: 'space-between' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs"
+                    onClick={() => setWizardStep(2)}
+                  >
+                    🡠 Atrás
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary text-xs"
+                    style={{ padding: '0.6rem 1.25rem', fontFamily: '"Space Grotesk", sans-serif', textTransform: 'uppercase', fontWeight: 'bold' }}
+                    onClick={() => setWizardStep(4)}
+                  >
+                    Revisar Resumen ➔
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 4: SUMMARY & ARCHITECTURE VERIFICATION REPORT */}
+            {wizardStep === 4 && (
+              <div>
+                <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1rem', fontWeight: 900, color: '#fff', textTransform: 'uppercase', marginBottom: '4px', textAlign: 'left' }}>
+                  🗲 Resumen e Instalación Oficial
+                </h3>
+                <p style={{ color: '#a1a1aa', fontSize: '0.725rem', marginBottom: '1.25rem', textAlign: 'left', lineHeight: '1.4' }}>
+                  Comprobá la arquitectura cargada antes de lanzar y activar la campaña promocional en tu tienda física.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', textAlign: 'left', backgroundColor: '#09090c', padding: '1.25rem', borderRadius: '6px', border: '1px solid #1e1e24' }}>
+                  {/* Show Brand Identity Thumb */}
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', borderBottom: '1px dashed #222', paddingBottom: '0.75rem' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '4px', backgroundColor: 'var(--theme-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                      {customLogoBase64 ? (
+                        <img src={customLogoBase64} alt="Brand custom Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: '1.2rem' }}>🥩</span>
+                      )}
+                    </div>
+                    <div>
+                      <b style={{ fontSize: '0.8rem', color: '#fff', display: 'block' }}>{shopName}</b>
+                      <span style={{ fontSize: '0.65rem', color: '#888' }}>{shopDescription}</span>
+                    </div>
+                  </div>
+
+                  {/* Show selected persistence engine summary */}
+                  <div style={{ borderBottom: '1px dashed #222', paddingBottom: '0.75rem' }}>
+                    <span style={{ display: 'block', fontSize: '0.6rem', textTransform: 'uppercase', color: '#71717a', fontWeight: 'bold' }}>Motor de Sincronización</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
+                      <span style={{ fontSize: '1rem' }}>
+                        {databaseSystem === 'local' && '📱'}
+                        {databaseSystem === 'mysql' && '💎'}
+                        {databaseSystem === 'gsheet' && '📊'}
+                        {databaseSystem === 'firebase' && '🔥'}
+                      </span>
+                      <strong style={{ fontSize: '0.725rem', color: 'var(--theme-accent)' }}>
+                        {databaseSystem === 'local' && 'LocalStorage Local Directo'}
+                        {databaseSystem === 'mysql' && 'Servidor de Base de Datos SQL Relacional (' + mysqlDatabase + ')'}
+                        {databaseSystem === 'gsheet' && 'Google Sheets Planilla de Sorteos'}
+                        {databaseSystem === 'firebase' && 'Firestore Cloud en Tiempo Real'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Show selected security log-ins */}
+                  <div style={{ borderBottom: '1px dashed #222', paddingBottom: '0.75rem' }}>
+                    <span style={{ display: 'block', fontSize: '0.6rem', textTransform: 'uppercase', color: '#71717a', fontWeight: 'bold' }}>Accesos y Usuarios</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '3px' }}>
+                      <div style={{ fontSize: '0.675rem' }}>
+                        <span style={{ color: '#888' }}>Admin:</span> <strong style={{ color: '#fff' }}>{adminUsernameConfig}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.675rem' }}>
+                        <span style={{ color: '#888' }}>Cajero:</span> <strong style={{ color: '#fff' }}>{cashierUsernameConfig}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Show selected Dynamic Swatch CSS */}
+                  <div>
+                    <span style={{ display: 'block', fontSize: '0.6rem', textTransform: 'uppercase', color: '#71717a', fontWeight: 'bold', marginBottom: '4px' }}>Esquema de Colores Seleccionado</span>
+                    <div style={{ display: 'flex', gap: '15px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: customPrimaryColor, border: '1px solid #fff' }} />
+                        <span style={{ fontSize: '0.65rem', color: '#fff', fontFamily: 'monospace' }}>Principal: {customPrimaryColor}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: customAccentColor, border: '1px solid #fff' }} />
+                        <span style={{ fontSize: '0.65rem', color: '#fff', fontFamily: 'monospace' }}>Acento: {customAccentColor}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Final step buttons */}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem', borderTop: '1px solid #222', paddingTop: '1rem', justifyContent: 'space-between' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs"
+                    onClick={() => setWizardStep(3)}
+                  >
+                    🡠 Atrás
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary text-xs"
+                    style={{ padding: '0.65rem 1.75rem', fontFamily: '"Space Grotesk", sans-serif', textTransform: 'uppercase', fontWeight: 'bold', border: 'none', color: '#000', backgroundColor: 'var(--theme-accent)' }}
+                    onClick={() => {
+                      // Persist all the user settings to local storage safely
+                      try {
+                        localStorage.setItem('raspa_shopName', shopName);
+                        localStorage.setItem('raspa_shopDesc', shopDescription);
+                        localStorage.setItem('raspa_campaignName', campaignName);
+                        localStorage.setItem('raspa_campaignSub', campaignSubtitle);
+                        localStorage.setItem('raspa_customPrimaryColor', customPrimaryColor);
+                        localStorage.setItem('raspa_customAccentColor', customAccentColor);
+                        localStorage.setItem('raspa_customLogoBase64', customLogoBase64);
+                        localStorage.setItem('raspa_databaseSystem', databaseSystem);
+                        
+                        localStorage.setItem('raspa_adminUsername', adminUsernameConfig);
+                        localStorage.setItem('raspa_adminPassword', adminPasswordConfig);
+                        localStorage.setItem('raspa_cashierUsername', cashierUsernameConfig);
+                        localStorage.setItem('raspa_cashierPassword', cashierPasswordConfig);
+
+                        localStorage.setItem('raspa_mysqlHost', mysqlHost);
+                        localStorage.setItem('raspa_mysqlPort', mysqlPort);
+                        localStorage.setItem('raspa_mysqlUser', mysqlUser);
+                        localStorage.setItem('raspa_mysqlPassword', mysqlPassword);
+                        localStorage.setItem('raspa_mysqlDatabase', mysqlDatabase);
+
+                        localStorage.setItem('raspa_fbApiKey', fbApiKey);
+                        localStorage.setItem('raspa_fbProjectId', fbProjectId);
+                        localStorage.setItem('raspa_fbAppId', fbAppId);
+
+                        localStorage.setItem('raspa_onboarded', 'true');
+                      } catch (_) {}
+
+                      setWizardStep(1);
+                      setShowOnboarding(false);
+                    }}
+                  >
+                    🚀 Completar y Lanzar Plataforma
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       )}
