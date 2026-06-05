@@ -44,6 +44,10 @@ import { signInWithGoogleSheets, signOutGoogleSheets, createSheetsDocument, appe
 import GoogleSheetsConfig from '../components/GoogleSheetsConfig';
 import { Html5Qrcode } from 'html5-qrcode';
 import WinningCharts from '../components/WinningCharts';
+import { driver } from 'driver.js';
+import 'driver.js/dist/driver.css';
+import { exportCouponToPDF } from './lib/pdfHelper';
+import PeakActivityHeatmap from '../components/PeakActivityHeatmap';
 
 // -------------------------------------------------------------
 // Type Definitions
@@ -84,6 +88,21 @@ interface DailyTrend {
   date: string;
   wins: number;
   unclaimed: number;
+}
+
+interface AuditTrailEntry {
+  id: string;
+  couponCode: string;
+  prizeName: string;
+  cashierId: string;
+  timestamp: string;
+  deviceInfo: string;
+}
+
+interface HeatmapDataPoint {
+  day: string;
+  hour: number;
+  count: number;
 }
 
 export default function Home() {
@@ -164,7 +183,41 @@ export default function Home() {
   // Layout View Control
   const [selectedView, setSelectedView] = useState<'split' | 'client' | 'admin' | 'cashier'>('split');
   // Admin Subsection View Control
-  const [activeTabAdmin, setActiveTabAdmin] = useState<'dashboard' | 'branding' | 'prizes' | 'validator'>('dashboard');
+  const [activeTabAdmin, setActiveTabAdmin] = useState<'dashboard' | 'branding' | 'prizes' | 'validator' | 'audit' | 'push'>('dashboard');
+
+  // Audit Trail & Heatmap dataset states
+  const [currentCashierName, setCurrentCashierName] = useState<string>('cajero');
+  const [auditLogs, setAuditLogs] = useState<AuditTrailEntry[]>([
+    { id: 'al-1', couponCode: 'AS-8294', prizeName: '1 Kg de Asado de Tira', cashierId: 'cajero', timestamp: '2026-06-04 23:17:05', deviceInfo: 'Windows (Chrome) - 1920x1080' },
+    { id: 'al-2', couponCode: 'CH-7121', prizeName: 'Chorizos Premium de Cerdo (6u)', cashierId: 'cajero_norte', timestamp: '2026-06-04 23:05:40', deviceInfo: 'iOS (Safari) - 390x844' },
+    { id: 'al-3', couponCode: 'DS-3928', prizeName: '15% de Descuento en tu próxima compra', cashierId: 'cajero', timestamp: '2026-06-04 21:22:15', deviceInfo: 'Android (Chrome) - 412x915' },
+  ]);
+
+  const [heatmapData, setHeatmapData] = useState<HeatmapDataPoint[]>([
+    { day: 'Lun', hour: 10, count: 5 }, { day: 'Lun', hour: 12, count: 12 }, { day: 'Lun', hour: 15, count: 4 }, { day: 'Lun', hour: 18, count: 15 },
+    { day: 'Mar', hour: 10, count: 3 }, { day: 'Mar', hour: 12, count: 8 }, { day: 'Mar', hour: 15, count: 9 }, { day: 'Mar', hour: 18, count: 11 },
+    { day: 'Mie', hour: 10, count: 7 }, { day: 'Mie', hour: 12, count: 15 }, { day: 'Mie', hour: 15, count: 6 }, { day: 'Mie', hour: 18, count: 20 },
+    { day: 'Jue', hour: 10, count: 4 }, { day: 'Jue', hour: 12, count: 10 }, { day: 'Jue', hour: 15, count: 8 }, { day: 'Jue', hour: 14, count: 12 },
+    { day: 'Vie', hour: 10, count: 14 }, { day: 'Vie', hour: 12, count: 25 }, { day: 'Vie', hour: 15, count: 16 }, { day: 'Vie', hour: 18, count: 32 },
+    { day: 'Sab', hour: 10, count: 22 }, { day: 'Sab', hour: 12, count: 45 }, { day: 'Sab', hour: 15, count: 38 }, { day: 'Sab', hour: 18, count: 50 },
+    { day: 'Dom', hour: 10, count: 18 }, { day: 'Dom', hour: 12, count: 35 }, { day: 'Dom', hour: 15, count: 28 }, { day: 'Dom', hour: 18, count: 40 },
+  ]);
+
+  // Simulated Service Worker background push subscriptions & logs
+  const [registeredDevices, setRegisteredDevices] = useState<{ id: string; name: string; dateSubscribed: string }[]>([
+    { id: 'sub-1', name: 'MacBook Pro 16" - Buenos Aires, AR', dateSubscribed: '2026-06-04 18:22:15' },
+    { id: 'sub-2', name: 'Samsung Galaxy S24 Ultra - Rosario, AR', dateSubscribed: '2026-06-04 19:10:45' },
+    { id: 'sub-3', name: 'iPhone 15 Pro - Montevideo, UY', dateSubscribed: '2026-06-04 20:05:00' }
+  ]);
+  const [pushQueue, setPushQueue] = useState<{ id: string; title: string; body: string; status: 'queued' | 'delivered'; timestamp: string; targets: number }[]>([
+    { id: 'pq-1', title: '🔥 ¡Asado Especial!', body: 'Solo por hoy en El Asador. ¡Raspá ahora y ganá!', status: 'delivered', timestamp: '2026-06-04 21:00:00', targets: 3 },
+    { id: 'pq-2', title: '🥩 Promo Fin de Semana', body: 'Llevate un Chimichurri gratis raspando ahora.', status: 'delivered', timestamp: '2026-06-04 22:30:00', targets: 3 }
+  ]);
+
+  // Push notification state forms
+  const [newPushTitle, setNewPushTitle] = useState('');
+  const [newPushBody, setNewPushBody] = useState('');
+  const [simulatedPushActive, setSimulatedPushActive] = useState<{ title: string; body: string } | null>(null);
 
   // Admin Authentication States
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
@@ -450,6 +503,40 @@ export default function Home() {
           }
         } catch (_) {}
 
+        // Hydrate current cashier name
+        try {
+          const savedCashierNameRef = localStorage.getItem('raspa_currentCashierName');
+          if (savedCashierNameRef) setCurrentCashierName(savedCashierNameRef);
+        } catch (_) {}
+
+        // Hydrate audit logs
+        try {
+          const savedAuditLogs = localStorage.getItem('raspa_auditLogs');
+          if (savedAuditLogs) {
+            setAuditLogs(JSON.parse(savedAuditLogs));
+          }
+        } catch (_) {}
+
+        // Hydrate activity heatmap
+        try {
+          const savedHeatmap = localStorage.getItem('raspa_heatmapData');
+          if (savedHeatmap) {
+            setHeatmapData(JSON.parse(savedHeatmap));
+          }
+        } catch (_) {}
+
+        // Hydrate registered devices & push queue
+        try {
+          const savedPushDevices = localStorage.getItem('raspa_registeredDevices');
+          if (savedPushDevices) {
+            setRegisteredDevices(JSON.parse(savedPushDevices));
+          }
+          const savedPushQueue = localStorage.getItem('raspa_pushQueue');
+          if (savedPushQueue) {
+            setPushQueue(JSON.parse(savedPushQueue));
+          }
+        } catch (_) {}
+
         // Track OS color scheme setting dynamically
         try {
           const queryMedia = window.matchMedia('(prefers-color-scheme: dark)');
@@ -545,6 +632,9 @@ export default function Home() {
 
     if (isCustomMatch || isDefaultMatch) {
       setIsCashierAuthenticated(true);
+      const activeName = inputUser || 'cajero';
+      setCurrentCashierName(activeName);
+      persistState('raspa_currentCashierName', activeName);
       persistState('raspa_cashierAuth', 'true');
       setCashierUsernameInput('');
       setCashierPasswordInput('');
@@ -556,6 +646,116 @@ export default function Home() {
   const handleCashierLogout = () => {
     setIsCashierAuthenticated(false);
     persistState('raspa_cashierAuth', 'false');
+  };
+
+  // Helper to collect highly precise physical browser details for audit check
+  const getDeviceIdentifier = () => {
+    if (typeof window === 'undefined') return 'Servidor';
+    const ua = navigator.userAgent;
+    let os = 'OS Desconocido';
+    if (ua.indexOf('Win') !== -1) os = 'Windows';
+    else if (ua.indexOf('Mac') !== -1) os = 'macOS';
+    else if (ua.indexOf('X11') !== -1) os = 'UNIX';
+    else if (ua.indexOf('Linux') !== -1) os = 'Linux';
+    else if (ua.indexOf('Android') !== -1) os = 'Android';
+    else if (ua.indexOf('iPhone') !== -1 || ua.indexOf('iPad') !== -1) os = 'iOS';
+    
+    let browser = 'Browser';
+    if (ua.indexOf('Chrome') !== -1) browser = 'Chrome';
+    else if (ua.indexOf('Safari') !== -1) browser = 'Safari';
+    else if (ua.indexOf('Firefox') !== -1) browser = 'Firefox';
+    else if (ua.indexOf('Edge') !== -1) browser = 'Edge';
+
+    const screenW = window.screen?.width || 0;
+    const screenH = window.screen?.height || 0;
+    return `${os} (${browser}) - ${screenW}x${screenH}`;
+  };
+
+  // Log active play onto the Peak Hourly Heatmap Matrix
+  const incrementHeatmapActivity = () => {
+    const dow = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+    const now = new Date();
+    const currentDayStr = dow[now.getDay()];
+    // Standardize to matching hour block limits [8, 10, 12, 14, 16, 18, 20, 22]
+    const rawHour = now.getHours();
+    let currentHour = 8;
+    if (rawHour >= 22) currentHour = 22;
+    else if (rawHour >= 20) currentHour = 20;
+    else if (rawHour >= 18) currentHour = 18;
+    else if (rawHour >= 16) currentHour = 16;
+    else if (rawHour >= 14) currentHour = 14;
+    else if (rawHour >= 12) currentHour = 12;
+    else if (rawHour >= 10) currentHour = 10;
+    else currentHour = 8;
+
+    setHeatmapData(prev => {
+      const exists = prev.some(point => point.day === currentDayStr && point.hour === currentHour);
+      let updated;
+      if (exists) {
+        updated = prev.map(point => {
+          if (point.day === currentDayStr && point.hour === currentHour) {
+            return { ...point, count: point.count + 1 };
+          }
+          return point;
+        });
+      } else {
+        updated = [...prev, { day: currentDayStr, hour: currentHour, count: 1 }];
+      }
+      persistState('raspa_heatmapData', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Launch interactive step-by-step tour highlights
+  const startWalkthrough = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      persistState('raspa_tour_completed', 'true');
+      const driverObj = driver({
+        showProgress: true,
+        steps: [
+          { 
+            element: '#step-registration-form', 
+            popover: { 
+              title: '📝 Registro Inicial', 
+              description: 'Aquí los clientes ingresan sus datos personales para activar la raspadita y registrar su participación en el sorteo.', 
+              side: 'bottom', 
+              align: 'start' 
+            } 
+          },
+          { 
+            element: '#step-scratch-card', 
+            popover: { 
+              title: '🥩 Tarjeta de Raspadita Virtual', 
+              description: '¡El área principal de juego! Arrastrá el cursor o usá tu dedo para raspar la boleta gris y descubrir tu premio.', 
+              side: 'top', 
+              align: 'center' 
+            } 
+          },
+          { 
+            element: '#step-qr-direct-access', 
+            popover: { 
+              title: '📲 Escáner Móvil Directo', 
+              description: 'Cualquier participante puede escanear este código QR con su propio teléfono para jugar de forma libre en pantalla completa.', 
+              side: 'top', 
+              align: 'center' 
+            } 
+          },
+          { 
+            element: '#step-stats-session', 
+            popover: { 
+              title: '📊 Contador de Sesión', 
+              description: 'Mirá la cantidad de raspaditas totales jugadas y las chances asignadas de forma instantánea.', 
+              side: 'top', 
+              align: 'center' 
+            } 
+          }
+        ]
+      });
+      driverObj.drive();
+    } catch (e) {
+      console.error('Error driving driver.js walkthrough:', e);
+    }
   };
 
   // Camera QR Code Scanner Effect
@@ -904,6 +1104,7 @@ export default function Home() {
       });
     }
 
+    incrementHeatmapActivity();
     setCustomerScratchCounter(prev => prev + 1);
   };
 
@@ -1037,10 +1238,23 @@ export default function Home() {
     setRecentActivity(updatedActivities);
     persistState('raspa_activity', JSON.stringify(updatedActivities));
 
+    // Capture permanent audit logs entry
+    const newAuditLog: AuditTrailEntry = {
+      id: 'al_' + Date.now(),
+      couponCode: matchedCoupon.code,
+      prizeName: matchedCoupon.prizeName,
+      cashierId: currentCashierName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      deviceInfo: getDeviceIdentifier()
+    };
+    const updatedAuditLogs = [newAuditLog, ...auditLogs];
+    setAuditLogs(updatedAuditLogs);
+    persistState('raspa_auditLogs', JSON.stringify(updatedAuditLogs));
+
     // Success feedback
     setValidationFeedback({
       type: 'success',
-      message: `🎉 ¡Éxito! El cupón ${matchedCoupon.code} fue marcado como CANJEADO.`
+      message: `🎉 ¡Éxito! El cupón ${matchedCoupon.code} fue marcado como CANJEADO y registrado en la bitácora de auditoría.`
     });
     
     // Clear validation interface
@@ -1423,6 +1637,252 @@ export default function Home() {
           • Usuario: <code style={{ color: 'var(--theme-accent)' }}>republica</code> / Clave: <code style={{ color: 'var(--theme-accent)' }}>republica123</code><br />
           • Google Permitidos: <code style={{ color: '#fff' }}>republicatecnica7@gmail.com</code> &amp; <code style={{ color: '#fff' }}>dmovil@gmail.com</code>
         </div>
+      </div>
+    );
+  };
+
+  // Push configuration queue states
+  const handleQueuePush = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPushTitle.trim() || !newPushBody.trim()) return;
+
+    const newPush = {
+      id: 'pq_' + Date.now(),
+      title: newPushTitle.trim(),
+      body: newPushBody.trim(),
+      status: 'queued' as const,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      targets: registeredDevices.length
+    };
+
+    const updatedQueue = [newPush, ...pushQueue];
+    setPushQueue(updatedQueue);
+    persistState('raspa_pushQueue', JSON.stringify(updatedQueue));
+    setNewPushTitle('');
+    setNewPushBody('');
+
+    // Simulate Background SW dispatch:
+    setTimeout(() => {
+      setPushQueue(prev => {
+        const withDelivered = prev.map(p => p.id === newPush.id ? { ...p, status: 'delivered' as const } : p);
+        persistState('raspa_pushQueue', JSON.stringify(withDelivered));
+        return withDelivered;
+      });
+
+      // Broadcaster push simulation popup for any participants currently viewing
+      if (registeredDevices.length > 0) {
+        setSimulatedPushActive({
+          title: newPush.title,
+          body: newPush.body
+        });
+      }
+    }, 2000);
+  };
+
+  const renderAuditTab = () => {
+    return (
+      <div style={{ fontFamily: '"Inter", sans-serif', padding: '0.25rem 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', gap: '8px' }}>
+          <div>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#fff', margin: 0, fontFamily: '"Space Grotesk", sans-serif' }}>🚨 Bitácora de Canjes y Seguridad (Audit Trail)</h3>
+            <p style={{ fontSize: '0.65rem', color: '#888', margin: '2px 0 0' }}>Registro permanente, inmutable y fechado de cada validación de premios hecha por los cajeros.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const headers = ['ID Registro', 'Codigo Cupon', 'Premio Validado', 'ID Cajero', 'Timestamp Preciso', 'ID Fisico del Dispositivo/Navegador'];
+              const rows = auditLogs.map(log => [
+                log.id,
+                log.couponCode,
+                log.prizeName,
+                log.cashierId,
+                log.timestamp,
+                log.deviceInfo
+              ]);
+              const csvContent = "data:text/csv;charset=utf-8," 
+                + [headers.join(','), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
+              const encodedUri = encodeURI(csvContent);
+              const link = document.createElement("a");
+              link.setAttribute("href", encodedUri);
+              link.setAttribute("download", `bitacora_auditoria_${new Date().toISOString().split('T')[0]}.csv`);
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+            style={{
+              padding: '6px 12px',
+              fontSize: '0.7rem',
+              backgroundColor: 'rgba(255,255,255,0.08)',
+              border: '1px solid #333',
+              borderRadius: '4px',
+              color: '#fff',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            📥 Exportar Bitácora (.CSV)
+          </button>
+        </div>
+
+        <div style={{ overflowX: 'auto', backgroundColor: '#131316', border: '1px solid #222', borderRadius: '6px', padding: '0.5rem' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', color: '#fff' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #333', color: '#a1a1aa', textAlign: 'left' }}>
+                <th style={{ padding: '0.5rem' }}>ID</th>
+                <th style={{ padding: '0.5rem' }}>Código</th>
+                <th style={{ padding: '0.5rem' }}>Premio</th>
+                <th style={{ padding: '0.5rem' }}>Cajero</th>
+                <th style={{ padding: '0.5rem' }}>Fecha y Hora</th>
+                <th style={{ padding: '0.5rem' }}>Firma del Dispositivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#71717a' }}>
+                    Ningún canje registrado en la bitácora todavía.
+                  </td>
+                </tr>
+              ) : (
+                auditLogs.map((log) => (
+                  <tr key={log.id} style={{ borderBottom: '1px solid #222' }}>
+                    <td style={{ padding: '0.5rem', fontFamily: '"JetBrains Mono", monospace', fontSize: '0.65rem', color: '#a1a1aa' }}>{log.id}</td>
+                    <td style={{ padding: '0.5rem', fontWeight: 'bold', color: 'var(--theme-accent)' }}>{log.couponCode}</td>
+                    <td style={{ padding: '0.5rem', fontWeight: '500' }}>{log.prizeName}</td>
+                    <td style={{ padding: '0.5rem', color: '#fff' }}>👤 {log.cashierId}</td>
+                    <td style={{ padding: '0.5rem', fontSize: '0.7rem', color: '#ffb03a', fontFamily: '"JetBrains Mono", monospace' }}>{log.timestamp}</td>
+                    <td style={{ padding: '0.5rem', fontSize: '0.65rem', color: '#71717a', maxWidth: '200px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={log.deviceInfo}>💻 {log.deviceInfo}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPushTab = () => {
+    return (
+      <div style={{ fontFamily: '"Inter", sans-serif', padding: '0.25rem 0' }}>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#fff', margin: 0, fontFamily: '"Space Grotesk", sans-serif' }}>📲 Simulación de Notificaciones Push de Service Worker</h3>
+        <p style={{ fontSize: '0.65rem', color: '#888', margin: '2px 0 0.75rem' }}>
+          Encolá alertas push de campaña para enviarlas en segundo plano a los navegadores participantes suscritos.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.2fr) minmax(180px, 1fr)', gap: '1rem', marginTop: '1rem' }}>
+          {/* Form to queue push alert */}
+          <form onSubmit={handleQueuePush} style={{ backgroundColor: '#131316', border: '1px solid #222', borderRadius: '6.5px', padding: '0.75rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#fff' }}>🔔 Nueva Alerta en Cola</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+              <div>
+                <label style={{ fontSize: '0.65rem', color: '#a1a1aa' }}>Título de Notificación</label>
+                <input
+                  type="text"
+                  placeholder="Ej: ¡Promo Sorpresa de Ribs! 🥩"
+                  className="form-input"
+                  style={{ width: '100%', padding: '6px', fontSize: '0.75rem', marginTop: '2px', color: '#fff', backgroundColor: '#222', border: '1px solid #333', borderRadius: '3px' }}
+                  value={newPushTitle}
+                  onChange={(e) => setNewPushTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.65rem', color: '#a1a1aa' }}>Mensaje/Cuerpo</label>
+                <textarea
+                  placeholder="Ej: Raspá gratis ahora y participa por un costillar premium gratis."
+                  className="form-input"
+                  rows={2}
+                  style={{ width: '100%', padding: '6px', fontSize: '0.75rem', marginTop: '2px', color: '#fff', backgroundColor: '#222', border: '1px solid #333', borderRadius: '3px', resize: 'none' }}
+                  value={newPushBody}
+                  onChange={(e) => setNewPushBody(e.target.value)}
+                />
+              </div>
+              <button
+                type="submit"
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: 'var(--theme-primary, #FF3B30)',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#fff',
+                  fontSize: '0.7rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  marginTop: '4px',
+                  alignSelf: 'flex-start'
+                }}
+              >
+                🚀 Encolar Push Alert ({registeredDevices.length} Suscriptores)
+              </button>
+            </div>
+          </form>
+
+          {/* Subscribed Devices list */}
+          <div style={{ backgroundColor: '#131316', border: '1px solid #222', borderRadius: '6.5px', padding: '0.75rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#fff' }}>📱 Dispositivos Suscriptores ({registeredDevices.length})</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '145px', overflowY: 'auto', marginTop: '8px' }}>
+              {registeredDevices.length === 0 ? (
+                <p style={{ color: '#71717a', fontSize: '0.65rem', textAlign: 'center', padding: '0.5rem' }}>Ningún dispositivo suscrito todavía.</p>
+              ) : (
+                registeredDevices.map(sc => (
+                  <div key={sc.id} style={{ borderBottom: '1px solid #222', paddingBottom: '3px', fontSize: '0.65rem', color: '#a1a1aa', padding: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fff', fontWeight: '500' }}>
+                      <span>💻 {sc.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = registeredDevices.filter(item => item.id !== sc.id);
+                          setRegisteredDevices(updated);
+                          persistState('raspa_registeredDevices', JSON.stringify(updated));
+                        }}
+                        style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', fontSize: '0.6rem', padding: 0 }}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                    <span>Registrado: {sc.dateSubscribed}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Dispatch Log lists */}
+        <div style={{ marginTop: '1rem' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#fff', display: 'block', marginBottom: '4.5px' }}>📜 Historial de Notificaciones Despachadas</span>
+          <div style={{ overflowY: 'auto', maxHeight: '130px', border: '1px solid #222', borderRadius: '4px' }}>
+            {pushQueue.length === 0 ? (
+              <p style={{ color: '#71717a', fontSize: '0.7rem', textAlign: 'center', padding: '1rem' }}>Cola vacía.</p>
+            ) : (
+              pushQueue.map(p => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', borderBottom: '1px solid #222', backgroundColor: '#131316', fontSize: '0.7rem', alignItems: 'center' }}>
+                  <div>
+                    <strong style={{ color: '#fff' }}>{p.title}</strong>
+                    <p style={{ color: '#a1a1aa', margin: 0, fontSize: '0.65rem' }}>{p.body}</p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{
+                      display: 'inline-block',
+                      fontSize: '0.6rem',
+                      padding: '1px 4px',
+                      borderRadius: '2px',
+                      backgroundColor: p.status === 'delivered' ? 'rgba(34,197,94,0.1)' : 'rgba(234,179,8,0.1)',
+                      color: p.status === 'delivered' ? '#4ade80' : '#facc15',
+                      fontWeight: 'bold',
+                      textTransform: 'uppercase'
+                    }}>{p.status === 'delivered' ? 'Despachado' : 'En cola'}</span>
+                    <span style={{ display: 'block', fontSize: '0.6rem', color: '#71717a', marginTop: '2px' }}>{p.timestamp}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
       </div>
     );
   };
@@ -1821,6 +2281,30 @@ export default function Home() {
                         <span>Vence: <strong style={{ color: expired && coupon.status === 'pendiente' ? '#f87171' : '#f59e0b' }}>{coupon.expiryDate}</strong></span>
                       )}
                     </div>
+
+                    <div style={{ borderTop: '1px solid #27272a', paddingTop: '3px', marginTop: '1px', display: 'flex', justifyContent: 'space-between' }}>
+                      <button
+                        type="button"
+                        onClick={() => exportCouponToPDF(coupon, shopName, campaignName)}
+                        style={{
+                          padding: '1px 8px',
+                          height: '18px',
+                          fontSize: '0.65rem',
+                          borderRadius: '2px',
+                          backgroundColor: 'rgba(255, 215, 0, 0.08)',
+                          border: '1px solid rgba(255, 215, 0, 0.3)',
+                          color: 'var(--theme-hover-accent, #ffd700)',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '2px'
+                        }}
+                      >
+                        <Download size={10} /> Descargar PDF Oficial
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -2139,6 +2623,20 @@ export default function Home() {
                     Validar Cupón 💰
                   </button>
                   <button
+                    className={`nav-tab-button ${activeTabAdmin === 'audit' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
+                    onClick={() => setActiveTabAdmin('audit')}
+                  >
+                    Auditoría 🔍
+                  </button>
+                  <button
+                    className={`nav-tab-button ${activeTabAdmin === 'push' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
+                    onClick={() => setActiveTabAdmin('push')}
+                  >
+                    Push SW 📲
+                  </button>
+                  <button
                     className="nav-tab-button"
                     style={{ color: '#ff4d4d', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', border: 'none', background: 'none' }}
                     onClick={handleAdminLogout}
@@ -2272,6 +2770,7 @@ export default function Home() {
                     </div>
 
                     {renderWinningTrendsChart()}
+                    <PeakActivityHeatmap data={heatmapData} themeSelected={themeSelected} />
                   </div>
                 )}
 
@@ -2568,6 +3067,8 @@ export default function Home() {
 
                 {/* SUBSECTION CONTENT: Cashier Validation Station */}
                 {activeTabAdmin === 'validator' && renderCashierTerminal()}
+                {activeTabAdmin === 'audit' && renderAuditTab()}
+                {activeTabAdmin === 'push' && renderPushTab()}
               </div>
 
               {/* CRM / Live Activity logs section */}
@@ -2648,19 +3149,40 @@ export default function Home() {
                 </div>
 
                 {/* Simulated Push Notification Slide down */}
-                {activePush && (
-                  <div className="push-banner-container">
-                    <div className="push-notification-banner">
-                      <div className="push-icon-circle">
-                        {logoIcon === 'beef' ? <Beef size={15} /> : <Flame size={15} />}
-                      </div>
-                      <div className="push-body">
-                        <div className="push-header">
-                          <span className="push-title">{shopName}</span>
-                          <span className="push-time">ahora</span>
+                {(activePush || simulatedPushActive) && (
+                  <div className="push-banner-container" style={{ zIndex: 9999 }}>
+                    <div className="push-notification-banner" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+                        <div className="push-icon-circle">
+                          {logoIcon === 'beef' ? <Beef size={15} /> : <Flame size={15} />}
                         </div>
-                        <p className="push-text"><b>{activePush.title}</b>: {activePush.body}</p>
+                        <div className="push-body" style={{ flex: 1 }}>
+                          <div className="push-header">
+                            <span className="push-title">{shopName}</span>
+                            <span className="push-time">ahora</span>
+                          </div>
+                          <p className="push-text">
+                            <b>{(activePush || simulatedPushActive)!.title}</b>: {(activePush || simulatedPushActive)!.body}
+                          </p>
+                        </div>
                       </div>
+                      {simulatedPushActive && (
+                        <button
+                          onClick={() => setSimulatedPushActive(null)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#71717a',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            padding: '2px',
+                            marginLeft: '4px'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2698,8 +3220,78 @@ export default function Home() {
                     <Sparkles size={11} /> {campaignName}
                   </div>
 
+                  {/* Floating Action/Utilities Row inside mobile screen */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0 1.25rem',
+                    marginTop: '0.75rem',
+                    gap: '6px'
+                  }}>
+                    <button
+                      type="button"
+                      id="step-tour-launcher-btn"
+                      onClick={() => startWalkthrough()}
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        backgroundColor: 'rgba(255,234,0,0.12)',
+                        border: '1px solid rgba(255,234,0,0.3)',
+                        borderRadius: '4px',
+                        color: '#ffdd00',
+                        fontSize: '0.62rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '3px'
+                      }}
+                    >
+                      ❓ Guía de Juego
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isAlready = registeredDevices.some(d => d.id === 'user-device-sim');
+                        if (isAlready) {
+                          alert('¡Tu navegador ya se encuentra registrado para notificaciones push!');
+                          return;
+                        }
+                        const newDev = {
+                          id: 'user-device-sim',
+                          name: `Mi Navegador (${navigator.platform || 'Móvil'})`,
+                          dateSubscribed: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                        };
+                        const updated = [newDev, ...registeredDevices];
+                        setRegisteredDevices(updated);
+                        persistState('raspa_registeredDevices', JSON.stringify(updated));
+                        alert('🔔 ¡Dispositivo registrado con éxito en el Service Worker de campaña!');
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        backgroundColor: 'rgba(59,130,246,0.12)',
+                        border: '1px solid rgba(59,130,246,0.3)',
+                        borderRadius: '4px',
+                        color: '#60a5fa',
+                        fontSize: '0.62rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '3px'
+                      }}
+                    >
+                      🔔 Recibir Push Alerts
+                    </button>
+                  </div>
+
                   {!clientRegistered ? (
-                    <div className="client-form-card" style={{ padding: '1.25rem 1rem', margin: '1rem 1.25rem' }}>
+                    <div className="client-form-card" id="step-registration-form" style={{ padding: '1.25rem 1rem', margin: '1rem 1.25rem' }}>
                       <h3 style={{
                         fontFamily: "'Space Grotesk', sans-serif",
                         fontSize: '0.85rem',
@@ -2845,19 +3437,21 @@ export default function Home() {
                       </div>
 
                       {/* INTERACTIVE SCRATCH ZONE */}
-                      <ScratchCard
-                        prizeName={customerActivePrize ? customerActivePrize.name : 'Siga participando'}
-                        isWinner={customerActivePrize !== null}
-                        prizeIcon={
-                          customerActivePrize 
-                            ? getPrizeIconElement(customerActivePrize.icon, 36) 
-                            : <HelpCircle size={36} style={{ color: '#a1a1aa' }} />
-                        }
-                        isPlayed={customerPlayed}
-                        onScratchComplete={handleScratchCompleted}
-                        onReset={handleClientGameReset}
-                        themeColorClass={`theme-${themeSelected}`}
-                      />
+                      <div id="step-scratch-card">
+                        <ScratchCard
+                          prizeName={customerActivePrize ? customerActivePrize.name : 'Siga participando'}
+                          isWinner={customerActivePrize !== null}
+                          prizeIcon={
+                            customerActivePrize 
+                              ? getPrizeIconElement(customerActivePrize.icon, 36) 
+                              : <HelpCircle size={36} style={{ color: '#a1a1aa' }} />
+                          }
+                          isPlayed={customerPlayed}
+                          onScratchComplete={handleScratchCompleted}
+                          onReset={handleClientGameReset}
+                          themeColorClass={`theme-${themeSelected}`}
+                        />
+                      </div>
 
                       {/* Post Scratch visual result / Coupon details */}
                       {customerPlayed && (
@@ -3365,6 +3959,20 @@ export default function Home() {
                     Premios & Probabilidades
                   </button>
                   <button
+                    className={`nav-tab-button ${activeTabAdmin === 'audit' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
+                    onClick={() => setActiveTabAdmin('audit')}
+                  >
+                    Auditoría
+                  </button>
+                  <button
+                    className={`nav-tab-button ${activeTabAdmin === 'push' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
+                    onClick={() => setActiveTabAdmin('push')}
+                  >
+                    Mensajes Push
+                  </button>
+                  <button
                     className="nav-tab-button"
                     style={{ color: '#ff4d4d', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', border: 'none', background: 'none' }}
                     onClick={handleAdminLogout}
@@ -3472,6 +4080,7 @@ export default function Home() {
                     </div>
 
                     {renderWinningTrendsChart()}
+                    <PeakActivityHeatmap data={heatmapData} themeSelected={themeSelected} />
                   </div>
                 )}
 
@@ -3663,6 +4272,9 @@ export default function Home() {
                     </form>
                   </div>
                 )}
+
+                {activeTabAdmin === 'audit' && renderAuditTab()}
+                {activeTabAdmin === 'push' && renderPushTab()}
               </div>
 
               {/* Right panel inside Admin Only Mode to perform redemptions directly */}
