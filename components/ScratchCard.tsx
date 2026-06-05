@@ -11,6 +11,7 @@ interface ScratchCardProps {
   isPlayed: boolean;
   onReset: () => void;
   themeColorClass: string;
+  onScratching?: () => void;
 }
 
 const drawScratchLayer = (ctx: CanvasRenderingContext2D, width: number, height: number, themeColorClass: string) => {
@@ -86,6 +87,7 @@ export default function ScratchCard({
   isPlayed,
   onReset,
   themeColorClass,
+  onScratching,
 }: ScratchCardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -122,6 +124,11 @@ export default function ScratchCard({
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // Trigger visual scratching audio if provided
+    if (onScratching) {
+      onScratching();
+    }
 
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;

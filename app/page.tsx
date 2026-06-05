@@ -35,7 +35,9 @@ import {
   Filter,
   Lock,
   User,
-  Mail
+  Mail,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import ScratchCard from '../components/ScratchCard';
 import QRGenerator from '../components/QRGenerator';
@@ -341,6 +343,127 @@ export default function Home() {
   const [winningHistory, setWinningHistory] = useState<DailyTrend[]>([]);
   const [activeHoverIndex, setActiveHoverIndex] = useState<number | null>(null);
 
+  // Audio mute and phone attempts states
+  const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
+  const [phoneAttemptsToday, setPhoneAttemptsToday] = useState<number>(0);
+  const lastScratchTimeRef = React.useRef<number>(0);
+
+  const getDailyAttemptsForPhone = (phone: string, dateStr: string): number => {
+    try {
+      const saved = localStorage.getItem('raspa_phoneAttempts');
+      if (!saved) return 0;
+      const parsed = JSON.parse(saved);
+      if (parsed[phone] && parsed[phone][dateStr]) {
+        return parsed[phone][dateStr];
+      }
+    } catch (_) {}
+    return 0;
+  };
+
+  const incrementDailyAttemptsForPhone = (phone: string, dateStr: string) => {
+    try {
+      const saved = localStorage.getItem('raspa_phoneAttempts') || '{}';
+      const parsed = JSON.parse(saved);
+      if (!parsed[phone]) {
+        parsed[phone] = {};
+      }
+      parsed[phone][dateStr] = (parsed[phone][dateStr] || 0) + 1;
+      localStorage.setItem('raspa_phoneAttempts', JSON.stringify(parsed));
+      setPhoneAttemptsToday(parsed[phone][dateStr]);
+    } catch (_) {}
+  };
+
+  // Web Audio Synthesizer sound generator
+  const playSoundEffect = (type: 'scratch' | 'win' | 'redeem') => {
+    if (isAudioMuted) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      
+      if (type === 'scratch') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(450, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.04, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.08);
+      } else if (type === 'win') {
+        const notes = [261.63, 329.63, 392.00, 440.00, 523.25, 659.25, 783.99]; // Pentatonic scale (C4, E4, G4, A4, C5, E5, G5)
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const time = ctx.currentTime + idx * 0.07;
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, time);
+          gain.gain.setValueAtTime(0, time);
+          gain.gain.linearRampToValueAtTime(0.12, time + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(time);
+          osc.stop(time + 0.35);
+        });
+      } else if (type === 'redeem') {
+        const frequencies = [587.33, 880.00, 1174.66]; // D5, A5, D6 metallic chord
+        frequencies.forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const delay = i * 0.06;
+          const time = ctx.currentTime + delay;
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, time);
+          gain.gain.setValueAtTime(0, time);
+          gain.gain.linearRampToValueAtTime(0.12, time + 0.012);
+          gain.gain.exponentialRampToValueAtTime(0.001, time + 0.45);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(time);
+          osc.stop(time + 0.5);
+        });
+      }
+    } catch (_) {}
+  };
+
+  const handleScratchingAudio = () => {
+    const now = Date.now();
+    if (now - lastScratchTimeRef.current >= 120) {
+      playSoundEffect('scratch');
+      lastScratchTimeRef.current = now;
+    }
+  };
+
+  // Sync remaining phone attempts whenever the registered phone changes
+  useEffect(() => {
+    if (clientRegPhone.trim()) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const phone = clientRegPhone.trim();
+      let count = 0;
+      try {
+        const saved = localStorage.getItem('raspa_phoneAttempts');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed[phone] && parsed[phone][todayStr]) {
+            count = parsed[phone][todayStr];
+          }
+        }
+      } catch (_) {}
+      
+      Promise.resolve().then(() => {
+        setPhoneAttemptsToday(count);
+      });
+    } else {
+      Promise.resolve().then(() => {
+        setPhoneAttemptsToday(0);
+      });
+    }
+  }, [clientRegPhone, clientRegistered]);
+
   // Helper code to verify if coupon expiry date is in the past
   const isCouponExpired = (coupon: Coupon): boolean => {
     if (!coupon.expiryDate) return false;
@@ -534,6 +657,14 @@ export default function Home() {
           const savedPushQueue = localStorage.getItem('raspa_pushQueue');
           if (savedPushQueue) {
             setPushQueue(JSON.parse(savedPushQueue));
+          }
+        } catch (_) {}
+
+        // Hydrate audio settings
+        try {
+          const savedMuted = localStorage.getItem('raspa_audio_muted');
+          if (savedMuted !== null) {
+            setIsAudioMuted(savedMuted === 'true');
           }
         } catch (_) {}
 
@@ -964,6 +1095,14 @@ export default function Home() {
   // Once scratched successfully, record state additions
   const handleScratchCompleted = () => {
     if (customerPlayed) return; // Prevent multiple counts
+    
+    // Register the scratch attempt for the phone number
+    const todayStr = new Date().toISOString().split('T')[0];
+    const phone = clientRegPhone.trim();
+    if (phone) {
+      incrementDailyAttemptsForPhone(phone, todayStr);
+    }
+
     setCustomerPlayed(true);
 
     const isWinner = customerActivePrize !== null;
@@ -989,15 +1128,16 @@ export default function Home() {
       setPrizes(updatedPrizes);
       persistState('raspa_prizes', JSON.stringify(updatedPrizes));
 
-      // Trigger confetti animation!
+      // Trigger confetti and satisfying win audio!
       try {
+        playSoundEffect('win');
         confetti({
           particleCount: 150,
           spread: 80,
           origin: { y: 0.6 }
         });
       } catch (err) {
-        console.error('Confetti error:', err);
+        console.error('Confetti or audio error:', err);
       }
 
       // Append code coupon
@@ -1141,6 +1281,15 @@ export default function Home() {
 
   // Client manual restart for demonstration ease
   const handleClientGameReset = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const phone = clientRegPhone.trim();
+    if (phone) {
+      const attempts = getDailyAttemptsForPhone(phone, todayStr);
+      if (attempts >= 3) {
+        alert(`⚠️ Has alcanzado el límite diario de 3 intentos hoy para el celular: ${phone}. ¡Por favor volvé mañana!`);
+        return;
+      }
+    }
     prepareNewScratchGame(Math.random() * 100);
   };
 
@@ -1148,6 +1297,13 @@ export default function Home() {
     e.preventDefault();
     if (!clientRegName.trim() || !clientRegPhone.trim()) {
       alert('Por favor, ingresá Nombre y Celular.');
+      return;
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    const phone = clientRegPhone.trim();
+    const attempts = getDailyAttemptsForPhone(phone, todayStr);
+    if (attempts >= 3) {
+      alert(`⚠️ El número de celular ${phone} ya alcanzó el límite máximo de 3 raspadas por día. ¡Por favor volvé mañana!`);
       return;
     }
     if (sendEmailConfirmation && !clientRegEmail.trim()) {
@@ -1250,6 +1406,9 @@ export default function Home() {
     const updatedAuditLogs = [newAuditLog, ...auditLogs];
     setAuditLogs(updatedAuditLogs);
     persistState('raspa_auditLogs', JSON.stringify(updatedAuditLogs));
+
+    // Play coupon redemption sound effect
+    playSoundEffect('redeem');
 
     // Success feedback
     setValidationFeedback({
@@ -2469,35 +2628,66 @@ export default function Home() {
             <span className="nav-brand-tag" id="main-loyalty-tag">Virtual</span>
           </div>
 
-          {/* View Toggles (Desktop friendly split workspace or strict mock roles) */}
-          <div className="nav-tabs" id="navigation-panels-selector">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* View Toggles (Desktop friendly split workspace or strict mock roles) */}
+            <div className="nav-tabs" id="navigation-panels-selector">
+              <button
+                className={`nav-tab-button ${selectedView === 'split' ? 'active' : ''}`}
+                onClick={() => setSelectedView('split')}
+                title="Vista de Panel Administrador + Celular de Cliente"
+              >
+                <Layout size={15} /> <span style={{ display: 'inline' }}>Simulación Completa</span>
+              </button>
+              <button
+                className={`nav-tab-button ${selectedView === 'client' ? 'active' : ''}`}
+                onClick={() => setSelectedView('client')}
+                title="Ver solamente la pantalla móvil del cliente"
+              >
+                <Smartphone size={15} /> <span>Celular Cliente</span>
+              </button>
+              <button
+                className={`nav-tab-button ${selectedView === 'admin' ? 'active' : ''}`}
+                onClick={() => setSelectedView('admin')}
+                title="Ver únicamente el panel de control del administrador"
+              >
+                <Settings size={15} /> <span>Panel Admin</span>
+              </button>
+              <button
+                className={`nav-tab-button ${selectedView === 'cashier' ? 'active' : ''}`}
+                onClick={() => setSelectedView('cashier')}
+                title="Acceso exclusivo para cajeros y validadores de la tienda"
+              >
+                <Ticket size={15} style={{ display: 'inline' }} /> <span>Terminal Cajeros 💰</span>
+              </button>
+            </div>
+
+            {/* Sound Toggle Button */}
             <button
-              className={`nav-tab-button ${selectedView === 'split' ? 'active' : ''}`}
-              onClick={() => setSelectedView('split')}
-              title="Vista de Panel Administrador + Celular de Cliente"
+              id="sound-toggle-main-header"
+              onClick={() => {
+                const newMute = !isAudioMuted;
+                setIsAudioMuted(newMute);
+                persistState('raspa_audio_muted', newMute ? 'true' : 'false');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                backgroundColor: isAudioMuted ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                border: isAudioMuted ? '1px solid #ef4444' : '1px solid #10b981',
+                borderRadius: '6px',
+                color: isAudioMuted ? '#ef4444' : '#10b981',
+                fontSize: '0.75rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                fontFamily: '"Space Grotesk", sans-serif',
+                transition: 'all 0.15s ease'
+              }}
+              title={isAudioMuted ? 'Activar Sonidos' : 'Silenciar Sonidos'}
             >
-              <Layout size={15} /> <span style={{ display: 'inline' }}>Simulación Completa</span>
-            </button>
-            <button
-              className={`nav-tab-button ${selectedView === 'client' ? 'active' : ''}`}
-              onClick={() => setSelectedView('client')}
-              title="Ver solamente la pantalla móvil del cliente"
-            >
-              <Smartphone size={15} /> <span>Celular Cliente</span>
-            </button>
-            <button
-              className={`nav-tab-button ${selectedView === 'admin' ? 'active' : ''}`}
-              onClick={() => setSelectedView('admin')}
-              title="Ver únicamente el panel de control del administrador"
-            >
-              <Settings size={15} /> <span>Panel Admin</span>
-            </button>
-            <button
-              className={`nav-tab-button ${selectedView === 'cashier' ? 'active' : ''}`}
-              onClick={() => setSelectedView('cashier')}
-              title="Acceso exclusivo para cajeros y validadores de la tienda"
-            >
-              <Ticket size={15} style={{ display: 'inline' }} /> <span>Terminal Cajeros 💰</span>
+              {isAudioMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              <span>{isAudioMuted ? 'MUTED' : 'SOUND'}</span>
             </button>
           </div>
         </header>
@@ -3235,7 +3425,7 @@ export default function Home() {
                       onClick={() => startWalkthrough()}
                       style={{
                         flex: 1,
-                        padding: '4px 8px',
+                        padding: '4px 6px',
                         backgroundColor: 'rgba(255,234,0,0.12)',
                         border: '1px solid rgba(255,234,0,0.3)',
                         borderRadius: '4px',
@@ -3249,7 +3439,7 @@ export default function Home() {
                         gap: '3px'
                       }}
                     >
-                      ❓ Guía de Juego
+                      ❓ Guía
                     </button>
                     
                     <button
@@ -3272,7 +3462,7 @@ export default function Home() {
                       }}
                       style={{
                         flex: 1,
-                        padding: '4px 8px',
+                        padding: '4px 6px',
                         backgroundColor: 'rgba(59,130,246,0.12)',
                         border: '1px solid rgba(59,130,246,0.3)',
                         borderRadius: '4px',
@@ -3286,7 +3476,34 @@ export default function Home() {
                         gap: '3px'
                       }}
                     >
-                      🔔 Recibir Push Alerts
+                      🔔 Recibir Push
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newMute = !isAudioMuted;
+                        setIsAudioMuted(newMute);
+                        persistState('raspa_audio_muted', newMute ? 'true' : 'false');
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '4px 6px',
+                        backgroundColor: isAudioMuted ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                        border: isAudioMuted ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+                        borderRadius: '4px',
+                        color: isAudioMuted ? '#f87171' : '#34d399',
+                        fontSize: '0.62rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '3px'
+                      }}
+                    >
+                      {isAudioMuted ? <VolumeX size={11} /> : <Volume2 size={11} />}
+                      <span>{isAudioMuted ? 'Silenciado' : 'Sonido'}</span>
                     </button>
                   </div>
 
@@ -3418,7 +3635,7 @@ export default function Home() {
                         fontSize: '0.65rem',
                         color: '#a1a1aa'
                       }}>
-                        <span>👤 Jugador: <b>{clientRegName}</b></span>
+                        <span>👤 Jugador: <b>{clientRegName}</b> ({3 - phoneAttemptsToday} de 3 intentos hoy)</span>
                         <button
                           type="button"
                           onClick={handleEditParticipant}
@@ -3450,6 +3667,7 @@ export default function Home() {
                           onScratchComplete={handleScratchCompleted}
                           onReset={handleClientGameReset}
                           themeColorClass={`theme-${themeSelected}`}
+                          onScratching={handleScratchingAudio}
                         />
                       </div>
 
@@ -3597,6 +3815,34 @@ export default function Home() {
                 <Sparkles size={11} /> {campaignName}
               </div>
 
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newMute = !isAudioMuted;
+                    setIsAudioMuted(newMute);
+                    persistState('raspa_audio_muted', newMute ? 'true' : 'false');
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    backgroundColor: isAudioMuted ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                    border: isAudioMuted ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(16,185,129,0.3)',
+                    borderRadius: '20px',
+                    color: isAudioMuted ? '#f87171' : '#34d399',
+                    fontSize: '0.65rem',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {isAudioMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                  <span>{isAudioMuted ? 'Sonido: Silenciado' : 'Sonido: Activado'}</span>
+                </button>
+              </div>
+
               {!clientRegistered ? (
                 <div className="client-form-card" style={{ padding: '2rem 1.5rem', margin: '1rem 1.25rem' }}>
                   <h3 style={{
@@ -3721,7 +3967,7 @@ export default function Home() {
                     fontSize: '0.7rem',
                     color: '#a1a1aa'
                   }}>
-                    <span>👤 Jugador: <b>{clientRegName}</b></span>
+                    <span>👤 Jugador: <b>{clientRegName}</b> ({3 - phoneAttemptsToday} de 3 intentos hoy)</span>
                     <button
                       type="button"
                       onClick={handleEditParticipant}
@@ -3752,6 +3998,7 @@ export default function Home() {
                     onScratchComplete={handleScratchCompleted}
                     onReset={handleClientGameReset}
                     themeColorClass={`theme-${themeSelected}`}
+                    onScratching={handleScratchingAudio}
                   />
 
                   {/* Post Scratch visual result / Coupon details */}
