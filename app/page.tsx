@@ -185,7 +185,7 @@ export default function Home() {
   // Layout View Control
   const [selectedView, setSelectedView] = useState<'split' | 'client' | 'admin' | 'cashier'>('split');
   // Admin Subsection View Control
-  const [activeTabAdmin, setActiveTabAdmin] = useState<'dashboard' | 'branding' | 'prizes' | 'validator' | 'audit' | 'push'>('dashboard');
+  const [activeTabAdmin, setActiveTabAdmin] = useState<'dashboard' | 'branding' | 'prizes' | 'validator' | 'audit' | 'push' | 'backup'>('dashboard');
 
   // Audit Trail & Heatmap dataset states
   const [currentCashierName, setCurrentCashierName] = useState<string>('cajero');
@@ -2046,6 +2046,328 @@ export default function Home() {
     );
   };
 
+  const renderBackupResetTab = () => {
+    return (
+      <div style={{ fontFamily: '"Inter", sans-serif', padding: '0.25rem 0' }}>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#fff', margin: 0, fontFamily: '"Space Grotesk", sans-serif' }}>⚙️ Mantenimiento, Resguardo y Copias de Seguridad</h3>
+        <p style={{ fontSize: '0.65rem', color: '#888', margin: '2px 0 1.25rem' }}>
+          Administre la integridad física de sus datos locales, genere respaldos completos de la configuración y limpie estadísticas para reiniciar campañas.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1.2fr) minmax(260px, 1fr)', gap: '1.25rem', marginTop: '1rem' }}>
+          
+          {/* Seccion 1: Copias y Restauracion */}
+          <div style={{ backgroundColor: '#131316', border: '1px solid #222', borderRadius: '6.5px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div>
+              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                📂 Copias de Seguridad (Backups)
+              </span>
+              <p style={{ fontSize: '0.65rem', color: '#888', margin: '4px 0 0 0' }}>
+                Resguarde todas las variables de marca, premios, auditoría y sorteos activos en un solo archivo plano e impórtelo en cualquier momento.
+              </p>
+            </div>
+
+            {/* BOTON DE EXPORTACION */}
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  const backupData: Record<string, string> = {};
+                  for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('raspa_')) {
+                      backupData[key] = localStorage.getItem(key) || '';
+                    }
+                  }
+                  
+                  // Also include in backupData basic current states just in case
+                  backupData['_app_backup_time'] = new Date().toISOString();
+                  backupData['_app_shop_name'] = shopName;
+                  
+                  const jsonString = JSON.stringify(backupData, null, 2);
+                  const blob = new Blob([jsonString], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  const dateStr = new Date().toISOString().split('T')[0];
+                  a.download = `backup_raspadita_${shopName.trim().replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${dateStr}.json`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  
+                  alert('¡Copia de seguridad del sistema exportada con éxito! Guarde el archivo .json descargado.');
+                } catch (err) {
+                  alert('Ocurrió un error al generar la copia de seguridad: ' + (err as Error).message);
+                }
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                fontSize: '0.75rem',
+                backgroundColor: 'var(--theme-primary)',
+                border: 'none',
+                borderRadius: '4px',
+                color: '#fff',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'opacity 0.2s'
+              }}
+            >
+              📥 Exportar Respaldo Completo (.JSON)
+            </button>
+
+            {/* DIVIDER */}
+            <div style={{ height: '1px', backgroundColor: '#222', margin: '4px 0' }} />
+
+            {/* RESTAURAR RESPALDO */}
+            <div>
+              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#fff', display: 'block', marginBottom: '4px' }}>
+                📤 Restaurar Copia de Seguridad
+              </span>
+              <p style={{ fontSize: '0.65rem', color: '#a1a1aa', marginBottom: '8px' }}>
+                Seleccione un archivo de respaldo (.json) exportado previamente para restaurar el contenido total.
+              </p>
+              
+              <div style={{
+                border: '2px dashed #333',
+                borderRadius: '6px',
+                padding: '1rem',
+                textAlign: 'center',
+                backgroundColor: '#09090b',
+                position: 'relative',
+                cursor: 'pointer'
+              }}>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      try {
+                        const raw = event.target?.result as string;
+                        const data = JSON.parse(raw);
+                        
+                        // Validate if it is a valid backup
+                        const keys = Object.keys(data);
+                        const hasRaspaKeys = keys.some(k => k.startsWith('raspa_'));
+                        
+                        if (!hasRaspaKeys) {
+                          alert('Error: El archivo seleccionado no contiene un formato de respaldo válido de esta aplicación de fidelización.');
+                          return;
+                        }
+                        
+                        if (confirm('¿Está seguro de que desea restaurar esta copia de seguridad? Se sobrescribirá toda la base de datos local y configuración actual con la del archivo.')) {
+                          // Write to localStorage
+                          keys.forEach(key => {
+                            if (key.startsWith('raspa_')) {
+                              localStorage.setItem(key, data[key]);
+                            }
+                          });
+                          
+                          alert('¡Copia de seguridad restaurada de forma exitosa! La aplicación se refrescará automáticamente.');
+                          window.location.reload();
+                        }
+                      } catch (err) {
+                        alert('Error al leer o procesar el archivo backup: ' + (err as Error).message);
+                      }
+                    };
+                    reader.readAsText(file);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    opacity: 0,
+                    cursor: 'pointer'
+                  }}
+                />
+                <div style={{ pointerEvents: 'none' }}>
+                  <span style={{ fontSize: '1.25rem', display: 'block', marginBottom: '4px' }}>📄</span>
+                  <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 'bold' }}>Haga clic o arrastre el archivo aquí</span>
+                  <span style={{ fontSize: '0.6rem', color: '#71717a', display: 'block', marginTop: '2px' }}>Solo archivos tipo .json</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seccion 2: Reseteo y Mantenimiento de Datos a 0 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            
+            {/* CARD: REINICIAR ESTADO 0 */}
+            <div style={{ backgroundColor: '#131316', border: '1px solid #222', borderRadius: '6.5px', padding: '1rem' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#ffa500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                ⚠️ Reiniciar Campaña a Estado 0
+              </span>
+              <p style={{ fontSize: '0.65rem', color: '#888', margin: '4.5px 0 12px 0', lineHeight: '1.25' }}>
+                Borra todos los canjes, cupones creados, bitácoras de auditoría, estadísticas acumuladas y registros de participación de clientes. 
+                <strong> Conserva sus logos, configuraciones y estilo de marca.</strong>
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('💥 ¿Desea vaciar y restablecer todas las participaciones y cupones a 0?\n\nEsta acción eliminará todos los cupones activos, canjes, bitácoras y estadísticas. Las configuraciones de diseño, contraseñas de seguridad y nombre del comercio no se borrarán.')) {
+                    try {
+                      // Reset states & localstorage
+                      localStorage.setItem('raspa_totalPlays', '0');
+                      localStorage.setItem('raspa_totalWins', '0');
+                      localStorage.setItem('raspa_totalRedeemed', '0');
+                      localStorage.setItem('raspa_coupons', '[]');
+                      localStorage.setItem('raspa_activity', '[]');
+                      localStorage.setItem('raspa_auditLogs', '[]');
+                      localStorage.setItem('raspa_winningTrend', '[]');
+                      localStorage.removeItem('raspa_phoneAttempts');
+                      
+                      alert('¡Campaña reiniciada con éxito! Todas las estadísticas y cupones se encuentran en Estado 0.');
+                      window.location.reload();
+                    } catch (e) {
+                      alert('Error durante el reinicio: ' + (e as Error).message);
+                    }
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  fontSize: '0.725rem',
+                  backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                  border: '1px solid #ffb03a',
+                  borderRadius: '4px',
+                  color: '#ffa500',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  transition: 'background 0.2s'
+                }}
+              >
+                🔄 Limpiar Todos los Datos (Estado 0)
+              </button>
+            </div>
+
+            {/* CARD: RESTABLECIMIENTO DE FABRICA */}
+            <div style={{ backgroundColor: '#131316', border: '1px solid #222', borderRadius: '6.5px', padding: '1rem' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#ff4d4d', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🚨 Restablecer Datos de Fábrica (Factory Reset)
+              </span>
+              <p style={{ fontSize: '0.65rem', color: '#888', margin: '4.5px 0 12px 0', lineHeight: '1.25' }}>
+                Borra absolutamente todo de forma irrecuperable. Reinicia contraseñas, conexiones de base de datos, marca y logos. 
+                Al reiniciar, se mostrará nuevamente el asistente de configuración inicial de instalación.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('🚨 ¡PRECAUCIÓN EXTREMA!\n\n¿Está absolutamente seguro de querer borrar todos los datos del sistema, claves, nombres, conexiones y logos?\n\nEsta acción es irreversible y volverá a mostrar el instalador de la app.')) {
+                    if (confirm('Confirme por segunda vez que desea realizar un restablecimiento de fábrica.')) {
+                      try {
+                        const keysToDelete: string[] = [];
+                        for (let i = 0; i < localStorage.length; i++) {
+                          const key = localStorage.key(i);
+                          if (key && key.startsWith('raspa_')) {
+                            keysToDelete.push(key);
+                          }
+                        }
+                        keysToDelete.forEach(k => localStorage.removeItem(k));
+                        
+                        alert('¡La base de datos local ha sido eliminada por completo!\n\nSe recargará la aplicación para presentar el asistente de inicialización.');
+                        window.location.reload();
+                      } catch (e) {
+                        alert('Error durante el restablecimiento completo: ' + (e as Error).message);
+                      }
+                    }
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  fontSize: '0.725rem',
+                  backgroundColor: 'rgba(255, 77, 77, 0.1)',
+                  border: '1px solid #ff4d4d',
+                  borderRadius: '4px',
+                  color: '#ff4d4d',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  transition: 'background 0.2s'
+                }}
+              >
+                💥 Restablecer Todo de Fábrica
+              </button>
+            </div>
+
+            {/* CARD: REPORTES EN EXCEL / CSV */}
+            <div style={{ backgroundColor: '#131316', border: '1px solid #222', borderRadius: '6.5px', padding: '1rem' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                📊 Exportar Reportes Rápidos
+              </span>
+              <p style={{ fontSize: '0.65rem', color: '#888', margin: '4.5px 0 12px 0' }}>
+                Descargue la base de datos de cupones para auditar o usar en campañas de correo o CRM externos.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    const headers = ['ID', 'Codigo Cupon', 'Cliente', 'Telefono', 'Email', 'Premio Ganado', 'Estado', 'Fecha Emision', 'Fecha Expiracion', 'Fecha Canje'];
+                    const rows = coupons.map(c => [
+                      c.id,
+                      c.code,
+                      c.userName,
+                      c.userPhone || '',
+                      c.userEmail || '',
+                      c.prizeName,
+                      c.status,
+                      c.createdAt,
+                      c.expiresAt,
+                      c.redeemedAt || ''
+                    ]);
+                    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+                      + [headers.join(','), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", `cupones_campana_${shopName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } catch (e) {
+                    alert('Error al generar CSV de cupones: ' + (e as Error).message);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  fontSize: '0.725rem',
+                  backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                  border: '1px solid #38bdf8',
+                  borderRadius: '4px',
+                  color: '#38bdf8',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  transition: 'background 0.2s'
+                }}
+              >
+                📥 Descargar Cupones CSV (.csv)
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
   const renderWinningTrendsChart = () => {
     if (winningHistory.length === 0) return null;
 
@@ -2601,15 +2923,24 @@ export default function Home() {
   if (!isMounted) return null;
 
   return (
-    <div className={`app-container ${autoDarkMode && systemTheme === 'light' ? 'mode-light' : ''} ${themeSelected === 'prime' ? 'theme-prime' : ''} ${themeSelected === 'charcoal' ? 'theme-charcoal' : ''} ${themeSelected === 'wood' ? 'theme-wood' : ''} ${themeSelected === 'organic' ? 'theme-organic' : ''}`}>
+    <div className={`app-container ${autoDarkMode && systemTheme === 'light' ? 'mode-light' : ''} ${themeSelected === 'prime' ? 'theme-prime' : ''} ${themeSelected === 'charcoal' ? 'theme-charcoal' : ''} ${themeSelected === 'wood' ? 'theme-wood' : ''} ${themeSelected === 'organic' ? 'theme-organic' : ''} ${themeSelected === 'custom' ? 'theme-custom' : ''}`}>
       {/* Dynamic Style Customizer Override */}
       <style dangerouslySetInnerHTML={{ __html: `
-        :root, [data-theme="dark"], [data-theme="light"], .theme-prime, .theme-charcoal, .theme-wood, .theme-organic {
+        ${(themeSelected === 'custom' || showOnboarding) ? `
+        :root, [data-theme="dark"], [data-theme="light"], .theme-prime, .theme-charcoal, .theme-wood, .theme-organic, .theme-custom {
           --theme-primary: ${customPrimaryColor} !important;
           --theme-primary-hover: ${getPrimaryHover(customPrimaryColor)} !important;
           --theme-primary-light: ${getPrimaryLight(customPrimaryColor)} !important;
           --theme-accent: ${customAccentColor} !important;
         }
+        ` : `
+        .theme-custom {
+          --theme-primary: ${customPrimaryColor} !important;
+          --theme-primary-hover: ${getPrimaryHover(customPrimaryColor)} !important;
+          --theme-primary-light: ${getPrimaryLight(customPrimaryColor)} !important;
+          --theme-accent: ${customAccentColor} !important;
+        }
+        `}
       `}} />
       
       {/* Top Navbar Header */}
@@ -2827,6 +3158,13 @@ export default function Home() {
                     Push SW 📲
                   </button>
                   <button
+                    className={`nav-tab-button ${activeTabAdmin === 'backup' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
+                    onClick={() => setActiveTabAdmin('backup')}
+                  >
+                    Mantenimiento & Copias ⚙️
+                  </button>
+                  <button
                     className="nav-tab-button"
                     style={{ color: '#ff4d4d', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', border: 'none', background: 'none' }}
                     onClick={handleAdminLogout}
@@ -3027,7 +3365,102 @@ export default function Home() {
                         >
                           {themeSelected === 'organic' && <Check size={16} />}
                         </button>
+                        <button
+                          type="button"
+                          className={`color-preset-btn ${themeSelected === 'custom' ? 'selected' : ''}`}
+                          onClick={() => handleThemeChange('custom')}
+                          title="Color de Marca Personalizado"
+                          style={{
+                            background: 'linear-gradient(135deg, #FF3B30 0%, #34d399 50%, #3b82f6 100%)',
+                            border: themeSelected === 'custom' ? '3px solid #ffffff' : '3px solid transparent'
+                          }}
+                        >
+                          {themeSelected === 'custom' && <Check size={16} />}
+                        </button>
                       </div>
+
+                      {themeSelected === 'custom' && (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '12px',
+                          backgroundColor: '#16161a',
+                          padding: '0.75rem',
+                          borderRadius: '6px',
+                          border: '1px solid #27272a',
+                          marginTop: '10px',
+                          marginBottom: '10px'
+                        }}>
+                          <div>
+                            <label style={{ fontSize: '0.65rem', color: '#a1a1aa', display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Color Principal</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="color"
+                                value={customPrimaryColor}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCustomPrimaryColor(val);
+                                  localStorage.setItem('raspa_customPrimaryColor', val);
+                                }}
+                                style={{ width: '28px', height: '28px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                              />
+                              <input
+                                type="text"
+                                value={customPrimaryColor}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCustomPrimaryColor(val);
+                                  localStorage.setItem('raspa_customPrimaryColor', val);
+                                }}
+                                style={{
+                                  backgroundColor: '#09090b',
+                                  border: '1px solid #27272a',
+                                  borderRadius: '4px',
+                                  padding: '4px 6px',
+                                  color: '#fff',
+                                  fontSize: '0.7rem',
+                                  fontFamily: 'monospace',
+                                  width: '100%'
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.65rem', color: '#a1a1aa', display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Color de Acento</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="color"
+                                value={customAccentColor}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCustomAccentColor(val);
+                                  localStorage.setItem('raspa_customAccentColor', val);
+                                }}
+                                style={{ width: '28px', height: '28px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                              />
+                              <input
+                                type="text"
+                                value={customAccentColor}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCustomAccentColor(val);
+                                  localStorage.setItem('raspa_customAccentColor', val);
+                                }}
+                                style={{
+                                  backgroundColor: '#09090b',
+                                  border: '1px solid #27272a',
+                                  borderRadius: '4px',
+                                  padding: '4px 6px',
+                                  color: '#fff',
+                                  fontSize: '0.7rem',
+                                  fontFamily: 'monospace',
+                                  width: '100%'
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', borderTop: '1px dashed #222', paddingTop: '8px' }}>
                         <input
@@ -3259,6 +3692,7 @@ export default function Home() {
                 {activeTabAdmin === 'validator' && renderCashierTerminal()}
                 {activeTabAdmin === 'audit' && renderAuditTab()}
                 {activeTabAdmin === 'push' && renderPushTab()}
+                {activeTabAdmin === 'backup' && renderBackupResetTab()}
               </div>
 
               {/* CRM / Live Activity logs section */}
@@ -4220,6 +4654,13 @@ export default function Home() {
                     Mensajes Push
                   </button>
                   <button
+                    className={`nav-tab-button ${activeTabAdmin === 'backup' ? 'active' : ''}`}
+                    style={{ border: 'none' }}
+                    onClick={() => setActiveTabAdmin('backup')}
+                  >
+                    Mantenimiento & Copias ⚙️
+                  </button>
+                  <button
                     className="nav-tab-button"
                     style={{ color: '#ff4d4d', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', border: 'none', background: 'none' }}
                     onClick={handleAdminLogout}
@@ -4385,7 +4826,102 @@ export default function Home() {
                         >
                           {themeSelected === 'organic' && <Check size={16} />}
                         </button>
+                        <button
+                          type="button"
+                          className={`color-preset-btn ${themeSelected === 'custom' ? 'selected' : ''}`}
+                          onClick={() => handleThemeChange('custom')}
+                          title="Color de Marca Personalizado"
+                          style={{
+                            background: 'linear-gradient(135deg, #FF3B30 0%, #34d399 50%, #3b82f6 100%)',
+                            border: themeSelected === 'custom' ? '3px solid #ffffff' : '3px solid transparent'
+                          }}
+                        >
+                          {themeSelected === 'custom' && <Check size={16} />}
+                        </button>
                       </div>
+
+                      {themeSelected === 'custom' && (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '12px',
+                          backgroundColor: '#16161a',
+                          padding: '0.75rem',
+                          borderRadius: '6px',
+                          border: '1px solid #27272a',
+                          marginTop: '10px',
+                          marginBottom: '10px'
+                        }}>
+                          <div>
+                            <label style={{ fontSize: '0.65rem', color: '#a1a1aa', display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Color Principal</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="color"
+                                value={customPrimaryColor}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCustomPrimaryColor(val);
+                                  localStorage.setItem('raspa_customPrimaryColor', val);
+                                }}
+                                style={{ width: '28px', height: '28px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                              />
+                              <input
+                                type="text"
+                                value={customPrimaryColor}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCustomPrimaryColor(val);
+                                  localStorage.setItem('raspa_customPrimaryColor', val);
+                                }}
+                                style={{
+                                  backgroundColor: '#09090b',
+                                  border: '1px solid #27272a',
+                                  borderRadius: '4px',
+                                  padding: '4px 6px',
+                                  color: '#fff',
+                                  fontSize: '0.7rem',
+                                  fontFamily: 'monospace',
+                                  width: '100%'
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.65rem', color: '#a1a1aa', display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Color de Acento</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="color"
+                                value={customAccentColor}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCustomAccentColor(val);
+                                  localStorage.setItem('raspa_customAccentColor', val);
+                                }}
+                                style={{ width: '28px', height: '28px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                              />
+                              <input
+                                type="text"
+                                value={customAccentColor}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCustomAccentColor(val);
+                                  localStorage.setItem('raspa_customAccentColor', val);
+                                }}
+                                style={{
+                                  backgroundColor: '#09090b',
+                                  border: '1px solid #27272a',
+                                  borderRadius: '4px',
+                                  padding: '4px 6px',
+                                  color: '#fff',
+                                  fontSize: '0.7rem',
+                                  fontFamily: 'monospace',
+                                  width: '100%'
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', borderTop: '1px dashed #222', paddingTop: '8px' }}>
                         <input
@@ -4522,6 +5058,7 @@ export default function Home() {
 
                 {activeTabAdmin === 'audit' && renderAuditTab()}
                 {activeTabAdmin === 'push' && renderPushTab()}
+                {activeTabAdmin === 'backup' && renderBackupResetTab()}
               </div>
 
               {/* Right panel inside Admin Only Mode to perform redemptions directly */}
